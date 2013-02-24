@@ -24,4 +24,9 @@
 		}												\
 	} while(0)
 
+enum Bool {
+	FALSE = 0,
+	TRUE = 1
+};
+
 #endif

@@ -15,11 +15,6 @@ typedef struct Node_ {
 
 typedef Node* List;
 
-enum Bool {
-	FALSE = 0,
-	TRUE = 1
-};
-
 /* Deallocates resources and destroys the list */
 void destroyList(List *list);
 

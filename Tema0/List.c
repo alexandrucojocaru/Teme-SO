@@ -27,6 +27,7 @@ int addElement(List *list, char *elem) {
 	/* Need to allocate len + 1, because of '\0' character */
 	int len = strlen(elem);
 	newNode->data = (char *)calloc(len + 1, sizeof(char));
+	DIE(newNode->data == NULL, "Could not create space for data");
 	memcpy(newNode->data, elem, len + 1);
 	newNode->next = NULL;
 
