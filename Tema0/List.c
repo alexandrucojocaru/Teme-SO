@@ -19,13 +19,13 @@ void destroyList(List *list) {
 	}
 }
 
-int addElement(List *list, char *elem) {
+int addElement(List *list, const char *elem) {
 	Node *head = *list;
 	Node *newNode = (Node *)calloc(1, sizeof(Node));
 	DIE(newNode == NULL, "Could not create new Node");
 
 	/* Need to allocate len + 1, because of '\0' character */
-	int len = strlen(elem);
+	unsigned int len = strlen(elem);
 	newNode->data = (char *)calloc(len + 1, sizeof(char));
 	DIE(newNode->data == NULL, "Could not create space for data");
 	memcpy(newNode->data, elem, len + 1);
@@ -44,12 +44,12 @@ int addElement(List *list, char *elem) {
 	return TRUE;
 }
 
-int findElement(List list, char *elem) {
+int findElement(const List list, const char *elem) {
 	Node *head = list;
 	if (head == NULL)
 		return FALSE;
 
-	while (head->next) {
+	while (head) {
 		if (strcmp(elem, head->data) == 0)
 			return TRUE;
 		head = head->next;
@@ -57,7 +57,7 @@ int findElement(List list, char *elem) {
 	return FALSE;
 }
 
-int deleteElement(List *list, char *elem) {
+int deleteElement(List *list, const char *elem) {
 	Node *head = *list;
 	if (head == NULL)
 		return FALSE;
@@ -83,12 +83,15 @@ int deleteElement(List *list, char *elem) {
 	return FALSE;
 }
 
-void printList(List list) {
+int printList(const List list, FILE *file) {
 	Node *head = list;
+	if (head == NULL)
+		return FALSE;
 	while (head) {
-		printf("%s", head->data);
+		fprintf(file, "%s", head->data);
 		head = head->next;
 		if (head)
-			printf(" ");
+			fprintf(file, " ");
 	}
+	return TRUE;
 }

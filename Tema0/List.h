@@ -7,6 +7,8 @@
 #ifndef LIST_H_
 #define LIST_H_
 
+#include "Globals.h"
+
 /* Structure for a Node of a list */
 typedef struct Node_ {
 	char *data;
@@ -19,15 +21,16 @@ typedef Node* List;
 void destroyList(List *list);
 
 /* Inserts an element to a list. Returns TRUE on success, FALSE otherwise */
-int addElement(List *list, char *elem);
+int addElement(List *list, const char *elem);
 
 /* Searches an element in a list. Returns TRUE if found, FALSE otherwise */
-int findElement(List list, char *elem);
+int findElement(const List list, const char *elem);
 
-/* Deletes an element in a list. Returns TRUE on success, FALSE otherwise */
-int deleteElement(List *list, char *elem);
+/* Deletes an element in a list. Returns TRUE if element was found and deleted,
+ * FALSE otherwise */
+int deleteElement(List *list, const char *elem);
 
-/* Print List to stdout */
-void printList(List list);
+/* Print List to file. Return TRUE if List is empty, FALSE otherwise. */
+int printList(const List list, FILE *file);
 
 #endif
