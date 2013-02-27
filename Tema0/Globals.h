@@ -13,6 +13,8 @@
 #include <stdio.h>
 
 #define DBG 1
+#define BUFSZ 20001
+#define CMDSZ 32
 
 #define DIE(assertion, call_description)				\
 	do {												\

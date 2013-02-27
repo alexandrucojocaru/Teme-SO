@@ -23,11 +23,11 @@ void initHashTable(HashTable **table, const unsigned int hashSize) {
 }
 
 void destroyHashTable(HashTable **table) {
+	int i;
 	if ((*table) == NULL) {
 		return;
 	}
 
-	int i;
 	for (i = 0; i < (*table)->hashSize; ++i) {
 		destroyList(&(*table)->table[i].words);
 	}
@@ -36,9 +36,10 @@ void destroyHashTable(HashTable **table) {
 }
 
 int addWord(HashTable *table, const char *word) {
+	unsigned int index;
 	DIE(table == NULL, "Table inexistnt");
 
-	unsigned int index = hash(word, table->hashSize);
+	index = hash(word, table->hashSize);
 	if (findElement(table->table[index].words, word) == FALSE) {
 		int retVal = addElement(&table->table[index].words, word);
 		if (retVal == TRUE)
@@ -51,15 +52,16 @@ int addWord(HashTable *table, const char *word) {
 }
 
 int deleteWord(HashTable *table, const char *word) {
+	unsigned int index;
 	DIE(table == NULL, "Table inexistent");
 
-	unsigned int index = hash(word, table->hashSize);
+	index = hash(word, table->hashSize);
 	return deleteElement(&table->table[index].words, word);
 }
 
 int findWord(const HashTable table, const char *word) {
-
 	unsigned int index = hash(word, table.hashSize);
+
 	return findElement(table.table[index].words, word);
 }
 

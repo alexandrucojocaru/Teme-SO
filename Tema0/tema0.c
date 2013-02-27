@@ -4,6 +4,7 @@
 #include "List.h"
 #include "Globals.h"
 #include "HashTable.h"
+#include "string.h"
 
 /* Tests for list */
 void testList() {
@@ -90,23 +91,131 @@ int parseArguments(int argc, char *argv[]) {
 	return argc - 1;
 }
 
-/* Process file */
-void processFile(FILE *file) {
+/* Write find to file */
+void printFind(int result, FILE *f) {
+	if (result == TRUE)
+		fprintf(f, "True\n\n");
+	else if (result == FALSE)
+		fprintf(f, "False\n\n");
+}
 
+/* Select command */
+void selectCommand(char buf[3][BUFSZ], HashTable *hashTable, char cmd[CMDSZ]) {
+	if (strcmp(cmd, "add") == 0) {
+		addWord(hashTable, buf[1]);
+		return;
+	}
+	if (strcmp(cmd, "remove") == 0) {
+		deleteWord(hashTable, buf[1]);
+		return;
+	}
+	if (strcmp(cmd, "clear") == 0) {
+		unsigned int size = hashTable->hashSize;
+		destroyHashTable(&hashTable);
+		initHashTable(&hashTable, size);
+		return;
+	}
+	if (strcmp(cmd, "find") == 0) {
+		/* TODO: find */
+		if (buf[1]) {
+			int result = findWord(*hashTable, buf[1]);
+			if (buf[2] && strcmp(buf[2], "") != 0) {
+				FILE *f;
+				f = fopen(buf[2], "a");
+				DIE(f == NULL, "Could not open file for update");
+				printFind(result, f);
+			}
+			else {
+				printFind(result, stdout);
+			}
+		}
+
+		return;
+	}
+	if (strcmp(cmd, "print_bucket") == 0) {
+		unsigned int bucket;
+		bucket = atoi(buf[1]);
+		if (buf[2] && strcmp(buf[2], "") != 0) {
+			FILE *f;
+			f = fopen(buf[2], "a");
+			DIE(f == NULL, "Could not open file for append");
+			printBucket(*hashTable, f, bucket);
+			fprintf(f, "\n\n");
+		}
+		else {
+			printBucket(*hashTable, stdout, bucket);
+			printf( "\n\n");
+		}
+
+		return;
+	}
+	if (strcmp(cmd, "print") == 0) {
+		if (buf[1] && strcmp(buf[1], "") != 0) {
+			FILE *f;
+			f = fopen(buf[1], "a");
+			DIE(f == NULL, "Could not open file for append");
+			printTable(*hashTable, f);
+			fprintf(f, "\n\n");
+		}
+		else {
+			printTable(*hashTable, stdout);
+			printf("\n\n");
+		}
+		return;
+	}
+	if (strcmp(cmd, "resize") == 0) {
+		/* TODO: resize */
+		return;
+	}
+}
+
+/* Parse command by extracting tokens */
+void parseCommand(char buf[3][BUFSZ], HashTable *hashTable) {
+	char *token;
+	char command[CMDSZ];
+	int i;
+
+	token = strtok(buf[0], " \n");
+	if (token == NULL || strcmp(token, "") == 0)
+		return;
+	strcpy(command, token);
+
+	for (i = 1; i <= 2; ++i) {
+		token = strtok(NULL, " \n");
+		if (token) {
+			strcpy(buf[i], token);
+		}
+		else
+			break;
+	}
+
+	selectCommand(buf, hashTable, command);
+}
+
+/* Process input file and creates corresponding output */
+void processFile(FILE *file, HashTable *hashTable) {
+	char buf[3][BUFSZ];
+	while (fgets(buf[0], BUFSZ, file) != NULL) {
+		parseCommand(buf, hashTable);
+		memset(buf, 0, 3 * BUFSZ * sizeof(char));
+	}
 }
 
 /* Process input and create required output */
 void processWork(int argc, char *argv[]) {
 	int numParams;
 	int hashSize;
+	HashTable *hashTable = NULL;
 
 	numParams = parseArguments(argc, argv);
 	hashSize = atoi(argv[1]);
 	fprintf(stderr, "hashSize: %d", hashSize);
 
+	initHashTable(&hashTable, hashSize);
+
 	/* Input from stdin */
 	if (numParams == 1) {
-		processFile(stdin);
+		processFile(stdin, hashTable);
 	}
 	else {
 		int i;
@@ -114,10 +223,12 @@ void processWork(int argc, char *argv[]) {
 			FILE *f;
 			f = fopen(argv[i], "r");
 			DIE(f == NULL, "Could not open file");
-			processFile(f);
+			processFile(f, hashTable);
 			fclose(f);
 		}
 	}
+
+	destroyHashTable(&hashTable);
 
 }
 
