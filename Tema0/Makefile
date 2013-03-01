@@ -1,5 +1,5 @@
 CC = cl
-CFLAGS = /Wall /nologo -D_CRT_SECURE_NO_DEPRECATE
+CFLAGS = /Wall /wd4127 /nologo -D_CRT_SECURE_NO_DEPRECATE
 BIN = tema0.exe
 
 all: build
