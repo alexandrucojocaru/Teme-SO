@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define DBG 1
+#define DBG 0
 #define BUFSZ 20001
 #define CMDSZ 32
 

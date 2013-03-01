@@ -23,7 +23,7 @@ void initHashTable(HashTable **table, const unsigned int hashSize) {
 }
 
 void destroyHashTable(HashTable **table) {
-	int i;
+	unsigned int i;
 	if ((*table) == NULL) {
 		return;
 	}
@@ -75,7 +75,7 @@ int printBucket(
 }
 
 void printTable(const HashTable table, FILE *file) {
-	int i;
+	unsigned int i;
 	for (i = 0; i < table.hashSize; ++i) {
 		if (printBucket(table, file, i) == TRUE) {
 			fprintf(file, "\n");

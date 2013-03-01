@@ -1,20 +1,19 @@
-CC = gcc
-SRC = $(wildcard *.c)
-OBJ = $(patsubst %.c, %.o, $(SRC))
-CC_FLAGS = -Wall -g
-LD_FLAGS = -Wall -g
-BIN = tema0
+CC = cl
+CFLAGS   = /Wall /nologo -D_CRT_SECURE_NO_DEPRECATE
+EXE = tema0.exe
+C_DIR = .
+OBJ_DIR = .
 
-all: $(BIN)
+all: build
 
-$(BIN): $(OBJ)
-	$(CC) $(LD_FLAGS) -o $@ $^
+build: {$(OBJ_DIR)}*.obj
+	$(CC) $(CFLAGS) /Fe$(EXE) $**
 
-%.o: %.c
-	$(CC) $(CC_FLAGS) -c -o $@ $<
+{$(C_DIR)}*.c{$(OBJ_DIR)}*.obj:
+	$(CC) $(CFLAGS) /c $<
 
 .PHONY: clean
 
 clean:
-	rm -f $(OBJ) $(BIN)
-	rm -f $(BIN)
+	del {$(OBJ_DIR)}*.obj
+	del $(EXE)

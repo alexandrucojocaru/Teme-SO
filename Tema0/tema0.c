@@ -7,8 +7,8 @@
 #include "string.h"
 
 /* Tests for list */
-void testList() {
-	char stuff[3][10] = { };
+void testList(void) {
+	char stuff[3][10] = {"anamimicu", "test2", "testlung3"};
 	List list = NULL;
 	addElement(&list, stuff[0]);
 	addElement(&list, stuff[1]);
@@ -51,9 +51,9 @@ void testList() {
 }
 
 /* Tests for HashTable */
-void testHash() {
-	printf("\nTests for HashTable\n\n");
+void testHash(void) {
 	HashTable* table = NULL;
+	printf("\nTests for HashTable\n\n");
 	initHashTable(&table, 5);
 	addWord(table, "jeanie");
 	addWord(table, "megen");
@@ -100,30 +100,31 @@ void printFind(int result, FILE *f) {
 }
 
 /* Select command */
-void selectCommand(char buf[3][BUFSZ], HashTable *hashTable, char cmd[CMDSZ]) {
+void selectCommand(char buf[3][BUFSZ], HashTable **hashTable, char cmd[CMDSZ]) {
 	if (strcmp(cmd, "add") == 0) {
-		addWord(hashTable, buf[1]);
+		addWord(*hashTable, buf[1]);
 		return;
 	}
 	if (strcmp(cmd, "remove") == 0) {
-		deleteWord(hashTable, buf[1]);
+		deleteWord(*hashTable, buf[1]);
 		return;
 	}
 	if (strcmp(cmd, "clear") == 0) {
-		unsigned int size = hashTable->hashSize;
-		destroyHashTable(&hashTable);
-		initHashTable(&hashTable, size);
+		unsigned int size = (*hashTable)->hashSize;
+		destroyHashTable(hashTable);
+		initHashTable(hashTable, size);
 		return;
 	}
 	if (strcmp(cmd, "find") == 0) {
 		/* TODO: find */
 		if (buf[1]) {
-			int result = findWord(*hashTable, buf[1]);
+			int result = findWord(**hashTable, buf[1]);
 			if (buf[2] && strcmp(buf[2], "") != 0) {
 				FILE *f;
 				f = fopen(buf[2], "a");
 				DIE(f == NULL, "Could not open file for update");
 				printFind(result, f);
+				fclose(f);
 			}
 			else {
 				printFind(result, stdout);
@@ -139,12 +140,17 @@ void selectCommand(char buf[3][BUFSZ], HashTable *hashTable, char cmd[CMDSZ]) {
 			FILE *f;
 			f = fopen(buf[2], "a");
 			DIE(f == NULL, "Could not open file for append");
-			printBucket(*hashTable, f, bucket);
-			fprintf(f, "\n\n");
+			if (printBucket(**hashTable, f, bucket) == TRUE)
+				fprintf(f, "\n\n");
+			else
+				fprintf(f, "\n");
+			fclose(f);
 		}
 		else {
-			printBucket(*hashTable, stdout, bucket);
-			printf( "\n\n");
+			if (printBucket(**hashTable, stdout, bucket) == TRUE)
+				fprintf(stdout, "\n\n");
+			else
+				fprintf(stdout, "\n");
 		}
 
 		return;
@@ -154,23 +160,29 @@ void selectCommand(char buf[3][BUFSZ], HashTable *hashTable, char cmd[CMDSZ]) {
 			FILE *f;
 			f = fopen(buf[1], "a");
 			DIE(f == NULL, "Could not open file for append");
-			printTable(*hashTable, f);
-			fprintf(f, "\n\n");
+			printTable(**hashTable, f);
+			fprintf(f, "\n");	/* Only one \n because of those from list */
+			fclose(f);
 		}
 		else {
-			printTable(*hashTable, stdout);
-			printf("\n\n");
+			printTable(**hashTable, stdout);
+			printf("\n");	/* Only one \n because of those from list print */
 		}
 		return;
 	}
 	if (strcmp(cmd, "resize") == 0) {
-		/* TODO: resize */
+		if (strcmp(buf[1], "double") == 0) {
+			doubleTable(hashTable);
+		}
+		else if (strcmp(buf[1], "halve") == 0) {
+			halveTable(hashTable);
+		}
 		return;
 	}
 }
 
 /* Parse command by extracting tokens */
-void parseCommand(char buf[3][BUFSZ], HashTable *hashTable) {
+void parseCommand(char buf[3][BUFSZ], HashTable **hashTable) {
 	char *token;
 	char command[CMDSZ];
 	int i;
@@ -193,7 +205,7 @@ void parseCommand(char buf[3][BUFSZ], HashTable *hashTable) {
 }
 
 /* Process input file and creates corresponding output */
-void processFile(FILE *file, HashTable *hashTable) {
+void processFile(FILE *file, HashTable **hashTable) {
 	char buf[3][BUFSZ];
 	while (fgets(buf[0], BUFSZ, file) != NULL) {
 		parseCommand(buf, hashTable);
@@ -215,7 +227,7 @@ void processWork(int argc, char *argv[]) {
 
 	/* Input from stdin */
 	if (numParams == 1) {
-		processFile(stdin, hashTable);
+		processFile(stdin, &hashTable);
 	}
 	else {
 		int i;
@@ -223,7 +235,7 @@ void processWork(int argc, char *argv[]) {
 			FILE *f;
 			f = fopen(argv[i], "r");
 			DIE(f == NULL, "Could not open file");
-			processFile(f, hashTable);
+			processFile(f, &hashTable);
 			fclose(f);
 		}
 	}

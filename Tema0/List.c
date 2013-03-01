@@ -20,6 +20,8 @@ void destroyList(List *list) {
 }
 
 int addElement(List *list, const char *elem) {
+	if (strcmp("", elem) == 0)
+		return FALSE;
 	Node *head = *list;
 	Node *newNode = (Node *)calloc(1, sizeof(Node));
 	DIE(newNode == NULL, "Could not create new Node");
@@ -85,7 +87,8 @@ int deleteElement(List *list, const char *elem) {
 
 int printList(const List list, FILE *file) {
 	Node *head = list;
-	if (head == NULL)
+	if (head == NULL || (head && head->data == NULL) || (head &&
+			strcmp("", head->data) == 0))
 		return FALSE;
 	while (head) {
 		fprintf(file, "%s", head->data);

@@ -5,7 +5,7 @@ CC_FLAGS = -Wall -g
 LD_FLAGS = -Wall -g
 BIN = tema0
 
-all: $(BIN)
+build: $(BIN)
 
 $(BIN): $(OBJ)
 	$(CC) $(LD_FLAGS) -o $@ $^
