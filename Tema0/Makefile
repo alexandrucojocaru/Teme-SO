@@ -1,19 +1,26 @@
 CC = cl
-CFLAGS   = /Wall /nologo -D_CRT_SECURE_NO_DEPRECATE
-EXE = tema0.exe
-C_DIR = .
-OBJ_DIR = .
+CFLAGS = /Wall /nologo -D_CRT_SECURE_NO_DEPRECATE
+BIN = tema0.exe
 
 all: build
 
-build: {$(OBJ_DIR)}*.obj
+build: tema0.obj HashTable.obj hash.obj List.obj
 	$(CC) $(CFLAGS) /Fe$(EXE) $**
 
-{$(C_DIR)}*.c{$(OBJ_DIR)}*.obj:
-	$(CC) $(CFLAGS) /c $<
+tema0.obj: tema0.c
+	$(CC) -c $(CFLAGS) tema0.c
+
+HashTable.obj: HashTable.h HashTable.c
+	$(CC) -c $(CFLAGS) HashTable.c
+
+hash.obj: hash.h hash.c
+	$(CC) -c $(CFLAGS) hash.c
+
+List.obj: List.h List.c
+	$(CC) -c $(CFLAGS) List.c
 
 .PHONY: clean
 
 clean:
-	del {$(OBJ_DIR)}*.obj
-	del $(EXE)
+	del /Q /F *.obj
+	del /Q /F $(BIN)

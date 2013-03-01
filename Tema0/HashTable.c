@@ -19,7 +19,8 @@ void initHashTable(HashTable **table, const unsigned int hashSize) {
 
 	(*table)->hashSize = hashSize;
 	(*table)->table = (Bucket *)calloc(hashSize, sizeof(Bucket));
-	DIE((*table)->table == NULL, "Could not allocate enough memory for buckets");
+	DIE((*table)->table == NULL, "Could not allocate enough memory for "\
+		"buckets");
 }
 
 void destroyHashTable(HashTable **table) {
@@ -93,8 +94,9 @@ int halveTable(HashTable **table) {
 
 static int resizeTable(HashTable **table, const float multiplyFactor) {
 	HashTable *newTable = NULL;
-	int i;
-	initHashTable(&newTable, (unsigned int)(*table)->hashSize * multiplyFactor);
+	unsigned int i;
+	float newSize = (float)(*table)->hashSize * multiplyFactor;
+	initHashTable(&newTable, (unsigned int)newSize);
 
 	for (i = 0; i < (*table)->hashSize; ++i) {
 		List list = (*table)->table[i].words;

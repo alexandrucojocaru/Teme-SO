@@ -66,7 +66,8 @@ void testHash(void) {
 	addWord(table, "jeanie");
 	printTable(*table, stdout);
 	printf(
-			"Hash(jeanie)=%u\tHash(megen)=%u\tHash(crocobaur)=%u\tHash(ginne)=%u\n",
+			"Hash(jeanie)=%u\tHash(megen)=%u\tHash(crocobaur)=%u\t"\
+			"Hash(ginne)=%u\n",
 			hash("megen", 4), hash("jeanie", 4), hash("crocobaur", 4),
 			hash("ginne", 4));
 	printBucket(*table, stdout, 1);
@@ -85,7 +86,7 @@ void testHash(void) {
 }
 
 /* Check arguments. Returns the number of given parameters*/
-int parseArguments(int argc, char *argv[]) {
+int parseArguments(int argc) {
 	DIE(argc < 2, "Usage error: <hashSize> [<file1> .. <filen>]");
 
 	return argc - 1;
@@ -116,7 +117,6 @@ void selectCommand(char buf[3][BUFSZ], HashTable **hashTable, char cmd[CMDSZ]) {
 		return;
 	}
 	if (strcmp(cmd, "find") == 0) {
-		/* TODO: find */
 		if (buf[1]) {
 			int result = findWord(**hashTable, buf[1]);
 			if (buf[2] && strcmp(buf[2], "") != 0) {
@@ -219,7 +219,7 @@ void processWork(int argc, char *argv[]) {
 	int hashSize;
 	HashTable *hashTable = NULL;
 
-	numParams = parseArguments(argc, argv);
+	numParams = parseArguments(argc);
 	hashSize = atoi(argv[1]);
 	fprintf(stderr, "hashSize: %d", hashSize);
 
@@ -245,20 +245,19 @@ void processWork(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
-    
 
 #if DBG
-    /* List tests */
+	/* List tests */
 	testList();
 #endif
 
 #if DBG
-    /* Hash tests */
+	/* Hash tests */
 	testHash();
 #endif
 
 	processWork(argc, argv);
 
 
-    return 0;
+	return 0;
 }

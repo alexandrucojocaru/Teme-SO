@@ -20,14 +20,17 @@ void destroyList(List *list) {
 }
 
 int addElement(List *list, const char *elem) {
+	Node *head = NULL;
+	Node *newNode = NULL;
+	unsigned int len;
 	if (strcmp("", elem) == 0)
 		return FALSE;
-	Node *head = *list;
-	Node *newNode = (Node *)calloc(1, sizeof(Node));
+	head = *list;
+	newNode = (Node *)calloc(1, sizeof(Node));
 	DIE(newNode == NULL, "Could not create new Node");
 
 	/* Need to allocate len + 1, because of '\0' character */
-	unsigned int len = strlen(elem);
+	len = strlen(elem);
 	newNode->data = (char *)calloc(len + 1, sizeof(char));
 	DIE(newNode->data == NULL, "Could not create space for data");
 	memcpy(newNode->data, elem, len + 1);
