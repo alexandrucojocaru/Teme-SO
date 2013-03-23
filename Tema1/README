@@ -1,0 +1,29 @@
+*** Tema1 SO - Mini-Shell ***
+*** Șerban-Radoi Constantin 333CA ***
+*** Martie 2013 ***
+
+** Descriere **
+    Tema constă în implementarea unui Hash Table în C, care să fie portabil pe
+ambele platforme: Linux, Windows.
+
+** Mod compilare **
+    * Pe Linux:
+    make -f GNUmakefile
+    * Pe Windows:
+    nmake /f Makefile
+
+** Pentru a rula **
+    ./tema0 <size> [<file1> <fileN>]
+
+** Listă fișiere **
+    * tema0.c       - Implementarea funcționalităților temei
+    * hash.h        - Declarația funcției de hash
+    * hash.c        - Implementarea funcției de hash
+    * List.h        - Declarația funcțiilor pentru o listă simplu înlănțuită
+    * List.c        - Implementarea listei simplu înlănțuite pentru tema0
+    * HashTable.h   - Declarația funcțiilor pentru Hash Table
+    * HashTable.c   - Implementarea funcțiilor pentru Hash Table
+    * Globals.h     - Diverse constante și macro-uri
+    * GNUmakefile   - Makefile pentru Linux
+    * Makefile      - Makefile pentru Windows
+    * README        - Acest fișier
