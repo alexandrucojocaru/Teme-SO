@@ -24,6 +24,9 @@
 
 #define MAX_SIZE_ENVIRONMENT_VARIABLE 100
 
+static LPTSTR get_word(word_t *s);
+static LPTSTR get_argv(simple_command_t *command);
+
 /**
  * Debug method, used by DIE macro.
  */
@@ -49,15 +52,16 @@ static VOID PrintLastError(const PCHAR message)
 static bool shell_cd(word_t *dir)
 {
 	/* TODO execute cd */
+	STARTUPINFO psi;
+	
 	LPTSTR directory = NULL;
 	BOOL ret;
 
 	directory = get_word(dir);
 
 	ret = SetCurrentDirectory(directory);
-	DIE(ret == FALSE, "SetCurrentDirectory");
 
-	return 0;
+	return ret;
 }
 
 /**
@@ -65,9 +69,7 @@ static bool shell_cd(word_t *dir)
  */
 static int shell_exit()
 {
-	/* TODO execute exit/quit */
-
-	return 0; /* TODO replace with actual exit code */
+	return SHELL_EXIT;
 }
 
 /**
@@ -148,29 +150,216 @@ static LPTSTR get_argv(simple_command_t *command)
 	return argv;
 }
 
+/*
+ * Open the file filename, with the mode MODE and creation CREATE_DISP
+ */
+static HANDLE my_open_file(LPTSTR filename, long MODE, int CREATE_DISP)
+{
+	SECURITY_ATTRIBUTES sa;
+
+	ZeroMemory(&sa, sizeof(sa));
+	sa.bInheritHandle = TRUE;
+
+	return CreateFile(
+		filename,
+		MODE,
+		FILE_SHARE_READ | FILE_SHARE_WRITE,
+		&sa,
+		CREATE_DISP,
+		FILE_ATTRIBUTE_NORMAL,
+		NULL);
+}
+
+/*
+ * Closes handles for a process
+ */
+static void close_process(LPPROCESS_INFORMATION lppi)
+{
+	BOOL bRes;
+	bRes = CloseHandle(lppi->hThread);
+	DIE(bRes == FALSE, "CloseHandle hThread");
+	bRes = CloseHandle(lppi->hProcess);
+	DIE(bRes == FALSE, "CloseHandle hProcess");
+}
+
+/*
+ * @psi		- STATRTUPINFO of the child process
+ * @hFile	- file handle for redirect
+ * @opt		- redirect option is one of the following
+ *		 STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE
+ */
+static void redirect_handle(STARTUPINFO *psi, HANDLE hFile, INT opt)
+{
+	if (hFile == INVALID_HANDLE_VALUE)
+		return;
+
+	/* Redirect */
+	/*ZeroMemory(psi, sizeof(*psi));
+	psi->cb = sizeof(*psi);*/
+
+	/*
+	psi->hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+	psi->hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+	psi->hStdError = GetStdHandle(STD_ERROR_HANDLE);*/
+
+	psi->dwFlags |= STARTF_USESTDHANDLES;
+
+	switch (opt) {
+	case STD_INPUT_HANDLE:
+		psi->hStdInput = hFile;
+		break;
+	case STD_OUTPUT_HANDLE:
+		psi->hStdOutput = hFile;
+		break;
+	case STD_ERROR_HANDLE:
+		psi->hStdError = hFile;
+		break;
+	}
+}
+
+/*
+ * Executes a simple command
+ */
+static int run_simple_command(LPTSTR command, simple_command_t *s)
+{
+	STARTUPINFO si;
+	PROCESS_INFORMATION pi;
+	DWORD dwRes;
+	BOOL bRes;
+	HANDLE hFileIn = NULL, hFileOut = NULL, hFileErr = NULL;
+	LPTSTR in_name = NULL, out_name = NULL, err_name = NULL;
+	BOOL out_is_err = FALSE;
+
+	ZeroMemory(&si, sizeof(si));
+	si.cb = sizeof(si);
+	ZeroMemory(&pi, sizeof(pi));
+
+	si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+	si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+	si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+
+	/* Redirect STDIN/STDOUT/STDERR */
+	in_name = get_word(s->in);
+	if (in_name != NULL) {
+		hFileIn = my_open_file(in_name, GENERIC_READ, OPEN_EXISTING);
+		DIE(hFileIn == INVALID_HANDLE_VALUE, "CreateFile");
+		redirect_handle(&si, hFileIn, STD_INPUT_HANDLE);
+	}
+
+	out_name = get_word(s->out);
+	if (out_name != NULL) {
+		if (s->io_flags & IO_OUT_APPEND) {
+			DWORD ret;
+			hFileOut = my_open_file(out_name, GENERIC_WRITE, OPEN_ALWAYS);
+			ret = SetFilePointer(hFileOut, 0, NULL, FILE_END);
+			DIE(ret == INVALID_SET_FILE_POINTER, "SetFilePointer");
+		}
+		else
+			hFileOut = my_open_file(out_name, GENERIC_WRITE, CREATE_ALWAYS);
+		DIE(hFileOut == INVALID_HANDLE_VALUE, "CreateFile");
+		redirect_handle(&si, hFileOut, STD_OUTPUT_HANDLE);
+	}
+
+	err_name = get_word(s->err);
+	if (err_name != NULL) {
+		if (out_name != NULL && lstrcmp(err_name, out_name) == 0) {
+			hFileErr = hFileOut;
+			out_is_err = TRUE;
+		}
+		else {
+			if (s->io_flags & IO_ERR_APPEND) {
+				DWORD ret;
+				hFileErr = my_open_file(err_name, GENERIC_WRITE, OPEN_ALWAYS);
+				ret = SetFilePointer(hFileErr, 0, NULL, FILE_END);
+				DIE(ret == INVALID_SET_FILE_POINTER, "SetFilePointer");
+			}
+			else
+				hFileErr = my_open_file(err_name, GENERIC_WRITE, CREATE_ALWAYS);
+		}
+		DIE(hFileErr == INVALID_HANDLE_VALUE, "CreateFile");
+		redirect_handle(&si, hFileErr, STD_ERROR_HANDLE);
+	}
+	
+	bRes = CreateProcess(
+			NULL,
+			command,
+			NULL,
+			NULL,
+			TRUE,
+			0,
+			NULL,
+			NULL,
+			&si,
+			&pi);
+	DIE(!bRes, "Create Process");
+
+	dwRes = WaitForSingleObject(pi.hProcess, INFINITE);
+	DIE(dwRes == WAIT_FAILED, "WaitForSingleObject");
+
+	bRes = GetExitCodeProcess(pi.hProcess, &dwRes);
+	DIE(bRes == FALSE, "GetExitCodeProcess");
+
+	close_process(&pi);
+
+	if (hFileIn != NULL && hFileIn != INVALID_HANDLE_VALUE) {
+		DIE(CloseHandle(hFileIn) == FALSE, "CloseHandleIn");
+	}
+	if (hFileOut != NULL && hFileOut != INVALID_HANDLE_VALUE) {
+		DIE(CloseHandle(hFileOut) == FALSE, "CloseHandleOut");
+	}
+	if (hFileErr != NULL && hFileErr != INVALID_HANDLE_VALUE && out_is_err == FALSE) {
+		DIE(CloseHandle(hFileErr) == FALSE, "CloseHandleErr");
+	}
+	free(in_name);
+	free(out_name);
+	free(err_name);
+
+	return dwRes;
+}
+
 /**
  * Parse and execute a simple command, by either creating a new processing or
  * internally process it.
  */
-bool parse_simple(simple_command_t *s, int level, command_t *father, HANDLE *h)
+static int parse_simple(simple_command_t *s, int level, command_t *father, HANDLE *h)
 {
+	LPTSTR argv = NULL;
+	LPTSTR verb = NULL;
+	int ret = 0;
 	/* TODO sanity checks */
 	assert(s != NULL);
 	assert(s->up == father);
 
+	verb = get_word(s->verb);
+
 	/* TODO if builtin command, execute the command */
+	if (strcmp((char *)verb, "exit") == 0 || strcmp((char *)verb, "quit") == 0) {
+		ret = shell_exit();
+		goto clear;
+	}
+	if (strcmp((char *)verb, "cd") == 0) {
+		ret = shell_cd(s->params);	/* Only the first parameter matters on cd */
+		goto clear;
+	}
 
 	/* TODO if variable assignment, execute the assignment and return
 	 * the exit status */
 
+	argv = get_argv(s);
 	/* TODO if external command:
 	 *  1. set handles
 	 *  2. redirect standard input / output / error
-         *  3. run command
+		 *  3. run command
 	 *  4. get exit code
 	 */
+	ret = run_simple_command(argv, s);
+	free(argv);
 
-	return 0; /* TODO replace with actual exit status */
+
+clear:
+	free(verb);
+
+	return ret; /* TODO replace with actual exit status */
 }
 
 /**
@@ -204,8 +393,10 @@ int parse_command(command_t *c, int level, command_t *father, void *h)
 
 	if (c->op == OP_NONE) {
 		/* TODO execute a simple command */
+		assert(c->cmd1 == NULL);
+		assert(c->cmd2 == NULL);
 
-		return 0; /* TODO replace with actual exit code of command */
+		return parse_simple(c->scmd, level + 1, c, (HANDLE*)h);
 	}
 
 	switch (c->op) {

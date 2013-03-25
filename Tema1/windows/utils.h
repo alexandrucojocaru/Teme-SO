@@ -14,6 +14,8 @@
 
 #define SHELL_EXIT -100
 
+#define DEBUG 1
+
 /* useful macro for handling error codes */
 #define DIE(assertion, call_description)			\
        do {							\
