@@ -14,6 +14,9 @@
 
 #define SHELL_EXIT -100
 
+#define INTERNAL TRUE
+#define EXTERNAL FALSE
+
 #define DEBUG 1
 
 /* useful macro for handling error codes */

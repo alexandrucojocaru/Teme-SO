@@ -23,6 +23,7 @@
 # Visual Studio files
 *.opensdf
 *.sdf
+*.suo
 
 # Lexer outputs
 *.tab.c

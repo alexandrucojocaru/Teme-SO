@@ -26,6 +26,9 @@
 
 static LPTSTR get_word(word_t *s);
 static LPTSTR get_argv(simple_command_t *command);
+static BOOL redirect_std_handles(STARTUPINFO *psi, HANDLE hFileIn,
+								 HANDLE hFileOut, HANDLE hFileErr,
+								 simple_command_t *s, BOOL internal);
 
 /**
  * Debug method, used by DIE macro.
@@ -49,13 +52,15 @@ static VOID PrintLastError(const PCHAR message)
 /**
  * Internal change-directory command.
  */
-static bool shell_cd(word_t *dir)
+static bool shell_cd(word_t *dir, simple_command_t *s)
 {
 	/* TODO execute cd */
-	STARTUPINFO psi;
+	HANDLE hFileIn = NULL, hFileOut = NULL, hFileErr = NULL;
 	
 	LPTSTR directory = NULL;
 	BOOL ret;
+
+	redirect_std_handles(NULL, hFileIn, hFileOut, hFileErr, s, INTERNAL);
 
 	directory = get_word(dir);
 
@@ -193,15 +198,6 @@ static void redirect_handle(STARTUPINFO *psi, HANDLE hFile, INT opt)
 	if (hFile == INVALID_HANDLE_VALUE)
 		return;
 
-	/* Redirect */
-	/*ZeroMemory(psi, sizeof(*psi));
-	psi->cb = sizeof(*psi);*/
-
-	/*
-	psi->hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-	psi->hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
-	psi->hStdError = GetStdHandle(STD_ERROR_HANDLE);*/
-
 	psi->dwFlags |= STARTF_USESTDHANDLES;
 
 	switch (opt) {
@@ -218,32 +214,24 @@ static void redirect_handle(STARTUPINFO *psi, HANDLE hFile, INT opt)
 }
 
 /*
- * Executes a simple command
+ * Redirect std handles for a newly created process.
+ * If internal is set to TRUE, it will set handles for current process
+ * Returns TRUE if out has the same name as err
  */
-static int run_simple_command(LPTSTR command, simple_command_t *s)
-{
-	STARTUPINFO si;
-	PROCESS_INFORMATION pi;
-	DWORD dwRes;
-	BOOL bRes;
-	HANDLE hFileIn = NULL, hFileOut = NULL, hFileErr = NULL;
+static BOOL redirect_std_handles(STARTUPINFO *psi, HANDLE hFileIn,
+								 HANDLE hFileOut, HANDLE hFileErr,
+								 simple_command_t *s, BOOL internal) {
 	LPTSTR in_name = NULL, out_name = NULL, err_name = NULL;
 	BOOL out_is_err = FALSE;
 
-	ZeroMemory(&si, sizeof(si));
-	si.cb = sizeof(si);
-	ZeroMemory(&pi, sizeof(pi));
-
-	si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-	si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
-	si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
-
-	/* Redirect STDIN/STDOUT/STDERR */
 	in_name = get_word(s->in);
 	if (in_name != NULL) {
 		hFileIn = my_open_file(in_name, GENERIC_READ, OPEN_EXISTING);
 		DIE(hFileIn == INVALID_HANDLE_VALUE, "CreateFile");
-		redirect_handle(&si, hFileIn, STD_INPUT_HANDLE);
+		if (!internal)
+			redirect_handle(psi, hFileIn, STD_INPUT_HANDLE);
+		else
+			SetStdHandle(STD_INPUT_HANDLE, hFileIn);
 	}
 
 	out_name = get_word(s->out);
@@ -257,7 +245,10 @@ static int run_simple_command(LPTSTR command, simple_command_t *s)
 		else
 			hFileOut = my_open_file(out_name, GENERIC_WRITE, CREATE_ALWAYS);
 		DIE(hFileOut == INVALID_HANDLE_VALUE, "CreateFile");
-		redirect_handle(&si, hFileOut, STD_OUTPUT_HANDLE);
+		if (!internal)
+			redirect_handle(psi, hFileOut, STD_OUTPUT_HANDLE);
+		else
+			SetStdHandle(STD_OUTPUT_HANDLE, hFileOut);
 	}
 
 	err_name = get_word(s->err);
@@ -277,8 +268,39 @@ static int run_simple_command(LPTSTR command, simple_command_t *s)
 				hFileErr = my_open_file(err_name, GENERIC_WRITE, CREATE_ALWAYS);
 		}
 		DIE(hFileErr == INVALID_HANDLE_VALUE, "CreateFile");
-		redirect_handle(&si, hFileErr, STD_ERROR_HANDLE);
+		if (!internal)
+			redirect_handle(psi, hFileErr, STD_ERROR_HANDLE);
+		else
+			SetStdHandle(STD_ERROR_HANDLE, hFileErr);
 	}
+
+	free(in_name);
+	free(out_name);
+	free(err_name);
+	return out_is_err;
+}
+
+/*
+ * Executes a simple command
+ */
+static int run_simple_command(LPTSTR command, simple_command_t *s)
+{
+	STARTUPINFO si;
+	PROCESS_INFORMATION pi;
+	DWORD dwRes;
+	BOOL bRes;
+	HANDLE hFileIn = NULL, hFileOut = NULL, hFileErr = NULL;
+	BOOL out_is_err = FALSE;
+
+	ZeroMemory(&si, sizeof(si));
+	si.cb = sizeof(si);
+	ZeroMemory(&pi, sizeof(pi));
+
+	si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+	si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+	si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+
+	out_is_err = redirect_std_handles(&si, hFileIn, hFileOut, hFileErr, s, EXTERNAL);
 	
 	bRes = CreateProcess(
 			NULL,
@@ -310,9 +332,6 @@ static int run_simple_command(LPTSTR command, simple_command_t *s)
 	if (hFileErr != NULL && hFileErr != INVALID_HANDLE_VALUE && out_is_err == FALSE) {
 		DIE(CloseHandle(hFileErr) == FALSE, "CloseHandleErr");
 	}
-	free(in_name);
-	free(out_name);
-	free(err_name);
 
 	return dwRes;
 }
@@ -338,7 +357,7 @@ static int parse_simple(simple_command_t *s, int level, command_t *father, HANDL
 		goto clear;
 	}
 	if (strcmp((char *)verb, "cd") == 0) {
-		ret = shell_cd(s->params);	/* Only the first parameter matters on cd */
+		ret = shell_cd(s->params, s);	/* Only the first parameter matters on cd */
 		goto clear;
 	}
 
