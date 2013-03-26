@@ -58,13 +58,27 @@ static bool shell_cd(word_t *dir, simple_command_t *s)
 	HANDLE hFileIn = NULL, hFileOut = NULL, hFileErr = NULL;
 	
 	LPTSTR directory = NULL;
-	BOOL ret;
+	BOOL ret, out_is_err;
 
-	redirect_std_handles(NULL, hFileIn, hFileOut, hFileErr, s, INTERNAL);
+	out_is_err = redirect_std_handles(NULL, hFileIn, hFileOut, hFileErr, s, INTERNAL);
 
 	directory = get_word(dir);
 
 	ret = SetCurrentDirectory(directory);
+
+	if (hFileIn != NULL && hFileIn != INVALID_HANDLE_VALUE) {
+		DIE(CloseHandle(hFileIn) == FALSE, "CloseHandleIn");
+	}
+	if (hFileOut != NULL && hFileOut != INVALID_HANDLE_VALUE) {
+		DIE(CloseHandle(hFileOut) == FALSE, "CloseHandleOut");
+	}
+	if (hFileErr != NULL && hFileErr != INVALID_HANDLE_VALUE && out_is_err == FALSE) {
+		DIE(CloseHandle(hFileErr) == FALSE, "CloseHandleErr");
+	}
+
+	SetStdHandle(STD_INPUT_HANDLE, GetStdHandle(STD_INPUT_HANDLE));
+	SetStdHandle(STD_OUTPUT_HANDLE, GetStdHandle(STD_OUTPUT_HANDLE));
+	SetStdHandle(STD_ERROR_HANDLE, GetStdHandle(STD_ERROR_HANDLE));
 
 	return ret;
 }
