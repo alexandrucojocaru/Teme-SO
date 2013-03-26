@@ -1,8 +1,10 @@
-CC=cl
-CFLAGS=/W3 /nologo 
-OBJ_PARSER=parser.tab.obj parser.yy.obj
-OBJ=main.obj utils-win.obj
-TARGET=mini-shell.exe
+CC = cl
+CFLAGS = /W3 /nologo 
+OBJ_PARSER = parser.tab.obj parser.yy.obj
+OBJ = main.obj utils-win.obj
+TARGET = mini-shell.exe
+
+all: build
 
 build: $(TARGET)
 

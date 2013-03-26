@@ -13,6 +13,7 @@
 #define ERR_ALLOCATION "unable to allocate memory"
 
 #define SHELL_EXIT -100
+#define VAR_ASSIGN_FAILED -200
 
 #define INTERNAL TRUE
 #define EXTERNAL FALSE

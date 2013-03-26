@@ -2,7 +2,9 @@
  * Operating Systems 2013 - Assignment 1
  *
  */
-
+/* do not use UNICODE */
+#undef _UNICODE
+#undef UNICODE
 
 #define _CRT_SECURE_NO_WARNINGS
 #include <windows.h>
@@ -60,7 +62,7 @@ static bool shell_cd(word_t *dir, simple_command_t *s)
 	LPTSTR directory = NULL;
 	BOOL ret, out_is_err;
 
-	out_is_err = redirect_std_handles(NULL, hFileIn, hFileOut, hFileErr, s, INTERNAL);
+	out_is_err = redirect_std_handles(NULL, &hFileIn, &hFileOut, &hFileErr, s, INTERNAL);
 
 	directory = get_word(dir);
 
@@ -68,12 +70,15 @@ static bool shell_cd(word_t *dir, simple_command_t *s)
 
 	if (hFileIn != NULL && hFileIn != INVALID_HANDLE_VALUE) {
 		DIE(CloseHandle(hFileIn) == FALSE, "CloseHandleIn");
+		hFileIn = INVALID_HANDLE_VALUE;
 	}
 	if (hFileOut != NULL && hFileOut != INVALID_HANDLE_VALUE) {
 		DIE(CloseHandle(hFileOut) == FALSE, "CloseHandleOut");
+		hFileOut = INVALID_HANDLE_VALUE;
 	}
 	if (hFileErr != NULL && hFileErr != INVALID_HANDLE_VALUE && out_is_err == FALSE) {
 		DIE(CloseHandle(hFileErr) == FALSE, "CloseHandleErr");
+		hFileErr = INVALID_HANDLE_VALUE;
 	}
 
 	SetStdHandle(STD_INPUT_HANDLE, GetStdHandle(STD_INPUT_HANDLE));
@@ -232,60 +237,60 @@ static void redirect_handle(STARTUPINFO *psi, HANDLE hFile, INT opt)
  * If internal is set to TRUE, it will set handles for current process
  * Returns TRUE if out has the same name as err
  */
-static BOOL redirect_std_handles(STARTUPINFO *psi, HANDLE hFileIn,
-								 HANDLE hFileOut, HANDLE hFileErr,
+static BOOL redirect_std_handles(STARTUPINFO *psi, HANDLE *hFileIn,
+								 HANDLE *hFileOut, HANDLE *hFileErr,
 								 simple_command_t *s, BOOL internal) {
 	LPTSTR in_name = NULL, out_name = NULL, err_name = NULL;
 	BOOL out_is_err = FALSE;
 
 	in_name = get_word(s->in);
 	if (in_name != NULL) {
-		hFileIn = my_open_file(in_name, GENERIC_READ, OPEN_EXISTING);
-		DIE(hFileIn == INVALID_HANDLE_VALUE, "CreateFile");
+		*hFileIn = my_open_file(in_name, GENERIC_READ, OPEN_EXISTING);
+		DIE(*hFileIn == INVALID_HANDLE_VALUE, "CreateFile");
 		if (!internal)
-			redirect_handle(psi, hFileIn, STD_INPUT_HANDLE);
+			redirect_handle(psi, *hFileIn, STD_INPUT_HANDLE);
 		else
-			SetStdHandle(STD_INPUT_HANDLE, hFileIn);
+			SetStdHandle(STD_INPUT_HANDLE, *hFileIn);
 	}
 
 	out_name = get_word(s->out);
 	if (out_name != NULL) {
 		if (s->io_flags & IO_OUT_APPEND) {
 			DWORD ret;
-			hFileOut = my_open_file(out_name, GENERIC_WRITE, OPEN_ALWAYS);
-			ret = SetFilePointer(hFileOut, 0, NULL, FILE_END);
+			*hFileOut = my_open_file(out_name, GENERIC_WRITE, OPEN_ALWAYS);
+			ret = SetFilePointer(*hFileOut, 0, NULL, FILE_END);
 			DIE(ret == INVALID_SET_FILE_POINTER, "SetFilePointer");
 		}
 		else
-			hFileOut = my_open_file(out_name, GENERIC_WRITE, CREATE_ALWAYS);
-		DIE(hFileOut == INVALID_HANDLE_VALUE, "CreateFile");
+			*hFileOut = my_open_file(out_name, GENERIC_WRITE, CREATE_ALWAYS);
+		DIE(*hFileOut == INVALID_HANDLE_VALUE, "CreateFile");
 		if (!internal)
-			redirect_handle(psi, hFileOut, STD_OUTPUT_HANDLE);
+			redirect_handle(psi, *hFileOut, STD_OUTPUT_HANDLE);
 		else
-			SetStdHandle(STD_OUTPUT_HANDLE, hFileOut);
+			SetStdHandle(STD_OUTPUT_HANDLE, *hFileOut);
 	}
 
 	err_name = get_word(s->err);
 	if (err_name != NULL) {
 		if (out_name != NULL && lstrcmp(err_name, out_name) == 0) {
-			hFileErr = hFileOut;
+			*hFileErr = *hFileOut;
 			out_is_err = TRUE;
 		}
 		else {
 			if (s->io_flags & IO_ERR_APPEND) {
 				DWORD ret;
-				hFileErr = my_open_file(err_name, GENERIC_WRITE, OPEN_ALWAYS);
-				ret = SetFilePointer(hFileErr, 0, NULL, FILE_END);
+				*hFileErr = my_open_file(err_name, GENERIC_WRITE, OPEN_ALWAYS);
+				ret = SetFilePointer(*hFileErr, 0, NULL, FILE_END);
 				DIE(ret == INVALID_SET_FILE_POINTER, "SetFilePointer");
 			}
 			else
-				hFileErr = my_open_file(err_name, GENERIC_WRITE, CREATE_ALWAYS);
+				*hFileErr = my_open_file(err_name, GENERIC_WRITE, CREATE_ALWAYS);
 		}
-		DIE(hFileErr == INVALID_HANDLE_VALUE, "CreateFile");
+		DIE(*hFileErr == INVALID_HANDLE_VALUE, "CreateFile");
 		if (!internal)
-			redirect_handle(psi, hFileErr, STD_ERROR_HANDLE);
+			redirect_handle(psi, *hFileErr, STD_ERROR_HANDLE);
 		else
-			SetStdHandle(STD_ERROR_HANDLE, hFileErr);
+			SetStdHandle(STD_ERROR_HANDLE, *hFileErr);
 	}
 
 	free(in_name);
@@ -314,7 +319,7 @@ static int run_simple_command(LPTSTR command, simple_command_t *s)
 	si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
 	si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
 
-	out_is_err = redirect_std_handles(&si, hFileIn, hFileOut, hFileErr, s, EXTERNAL);
+	out_is_err = redirect_std_handles(&si, &hFileIn, &hFileOut, &hFileErr, s, EXTERNAL);
 	
 	bRes = CreateProcess(
 			NULL,
@@ -336,18 +341,44 @@ static int run_simple_command(LPTSTR command, simple_command_t *s)
 	DIE(bRes == FALSE, "GetExitCodeProcess");
 
 	close_process(&pi);
-
+	/*
+#ifdef DEBUG
+	fprintf(stderr, "hFileOut==NULL {%s}; hFileOut==INVALID {%s}", hFileOut == NULL?"true":"false", hFileOut == INVALID_HANDLE_VALUE?"true":"false");
+#endif*/
 	if (hFileIn != NULL && hFileIn != INVALID_HANDLE_VALUE) {
 		DIE(CloseHandle(hFileIn) == FALSE, "CloseHandleIn");
+		hFileIn = INVALID_HANDLE_VALUE;
 	}
 	if (hFileOut != NULL && hFileOut != INVALID_HANDLE_VALUE) {
 		DIE(CloseHandle(hFileOut) == FALSE, "CloseHandleOut");
+		hFileOut = INVALID_HANDLE_VALUE;
 	}
 	if (hFileErr != NULL && hFileErr != INVALID_HANDLE_VALUE && out_is_err == FALSE) {
 		DIE(CloseHandle(hFileErr) == FALSE, "CloseHandleErr");
+		hFileErr = INVALID_HANDLE_VALUE;
 	}
 
 	return dwRes;
+}
+
+/*
+ * Environment variable assignment
+ */
+static int assign_env_var(const char *var, const char *val) {
+	BOOL ret_code;
+	/*
+#ifdef DEBUG
+	fprintf(stderr, "var {%s} = val{%s}\n", var, val);
+	fflush(stderr);
+#endif*/
+	
+	ret_code = SetEnvironmentVariable(var, val);
+	DIE(ret_code == 0, "SetEnvironmentVariable");
+
+	if (ret_code == 0)
+		return VAR_ASSIGN_FAILED;
+	else
+		return 0;
 }
 
 /**
@@ -377,6 +408,24 @@ static int parse_simple(simple_command_t *s, int level, command_t *father, HANDL
 
 	/* TODO if variable assignment, execute the assignment and return
 	 * the exit status */
+	if (s->verb->next_part != NULL) {
+		CHAR second[MAX_SIZE_ENVIRONMENT_VARIABLE];
+		CHAR third[MAX_SIZE_ENVIRONMENT_VARIABLE];
+		strcpy(second, s->verb->next_part->string);
+		if (second != NULL && (strcmp(second, "=") == 0)) {
+			if (s->verb->next_part->next_part != NULL) {
+				strcpy(third, s->verb->next_part->next_part->string);
+				if (third != NULL) {
+					ret = assign_env_var(s->verb->string, third);
+				}
+				else
+					ret = VAR_ASSIGN_FAILED;
+			}
+			else
+				ret = VAR_ASSIGN_FAILED;
+			goto clear;
+		}
+	}
 
 	argv = get_argv(s);
 	/* TODO if external command:
@@ -420,6 +469,8 @@ static bool do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *f
  */
 int parse_command(command_t *c, int level, command_t *father, void *h)
 {
+	int ret;
+
 	/* TODO sanity checks */
 	assert(c != NULL);
 	assert(c->up == father);
@@ -435,7 +486,9 @@ int parse_command(command_t *c, int level, command_t *father, void *h)
 	switch (c->op) {
 	case OP_SEQUENTIAL:
 		/* TODO execute the commands one after the other */
-		break;
+		ret = parse_command(c->cmd1, level + 1, c, (HANDLE*)h);
+		ret = parse_command(c->cmd2, level + 1, c, (HANDLE*)h);
+		return ret;
 
 	case OP_PARALLEL:
 		/* TODO execute the commands simultaneously */
@@ -444,12 +497,20 @@ int parse_command(command_t *c, int level, command_t *father, void *h)
 	case OP_CONDITIONAL_NZERO:
 		/* TODO execute the second command only if the first one
 		 * returns non zero */
-		break;
+		ret = parse_command(c->cmd1, level + 1, c, (HANDLE *)h);
+		if (ret != 0) {
+			ret = parse_command(c->cmd2, level + 1, c, (HANDLE *)h);
+		}
+		return ret;
 
 	case OP_CONDITIONAL_ZERO:
 		/* TODO execute the second command only if the first one
 		 * returns zero */
-		break;
+		ret = parse_command(c->cmd1, level + 1, c, (HANDLE *)h);
+		if (ret == 0) {
+			ret = parse_command(c->cmd2, level + 1, c, (HANDLE *)h);
+		}
+		return ret;
 
 	case OP_PIPE:
 		/* TODO redirect the output of the first command to the
