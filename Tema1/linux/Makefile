@@ -1,9 +1,10 @@
-CC=gcc
-CFLAGS=-g -Wall
-OBJ_PARSER=parser.tab.o parser.yy.o
-OBJ=main.o utils-lin.o
-TARGET=mini-shell
+CC = gcc
+CFLAGS = -g -Wall
+OBJ_PARSER = parser.tab.o parser.yy.o
+OBJ = main.o utils-lin.o
+TARGET = mini-shell
 
+all: build
 build: $(TARGET)
 
 $(TARGET): $(OBJ) $(OBJ_PARSER)

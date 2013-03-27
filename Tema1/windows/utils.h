@@ -14,9 +14,14 @@
 
 #define SHELL_EXIT -100
 #define VAR_ASSIGN_FAILED -200
+#define CREATE_PROCESS_FAILED -300
 
 #define INTERNAL TRUE
 #define EXTERNAL FALSE
+
+#define NO_PIPE 0
+#define PIPE_IN 1
+#define PIPE_OUT 2
 
 #define DEBUG 1
 

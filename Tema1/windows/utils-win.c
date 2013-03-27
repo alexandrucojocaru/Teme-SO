@@ -68,6 +68,8 @@ static bool shell_cd(word_t *dir, simple_command_t *s)
 
 	ret = SetCurrentDirectory(directory);
 
+	free(directory);
+
 	if (hFileIn != NULL && hFileIn != INVALID_HANDLE_VALUE) {
 		DIE(CloseHandle(hFileIn) == FALSE, "CloseHandleIn");
 		hFileIn = INVALID_HANDLE_VALUE;
@@ -310,6 +312,7 @@ static int run_simple_command(LPTSTR command, simple_command_t *s)
 	BOOL bRes;
 	HANDLE hFileIn = NULL, hFileOut = NULL, hFileErr = NULL;
 	BOOL out_is_err = FALSE;
+	LPTSTR verb = NULL;
 
 	ZeroMemory(&si, sizeof(si));
 	si.cb = sizeof(si);
@@ -332,7 +335,15 @@ static int run_simple_command(LPTSTR command, simple_command_t *s)
 			NULL,
 			&si,
 			&pi);
-	DIE(!bRes, "Create Process");
+	/*DIE(!bRes, "Create Process");*/
+	if (!bRes) {
+		verb = get_word(s->verb);
+		fprintf(stderr, "Execution failed for '%s'\n", verb);
+		fflush(stderr);
+		fflush(stderr);
+		free(verb);
+		return CREATE_PROCESS_FAILED;
+	}
 
 	dwRes = WaitForSingleObject(pi.hProcess, INFINITE);
 	DIE(dwRes == WAIT_FAILED, "WaitForSingleObject");
@@ -447,21 +458,132 @@ clear:
 /**
  * Process two commands in parallel, by creating two children.
  */
-static bool do_in_parallel(command_t *cmd1, command_t *cmd2, int level, command_t *father)
+static BOOL do_in_parallel(command_t *cmd1, command_t *cmd2, int level, command_t *father)
 {
 	/* TODO execute cmd1 and cmd2 simultaneously */
 
-	return true; /* TODO replace with actual exit status */
+	return TRUE; /* TODO replace with actual exit status */
 }
 
 /**
  * Run commands by creating an annonymous pipe (cmd1 | cmd2)
  */
-static bool do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *father)
+static int do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *father)
 {
 	/* TODO redirect the output of cmd1 to the input of cmd2 */
+	SECURITY_ATTRIBUTES sa;
+	HANDLE hRead, hWrite;
+	BOOL bRes;
+	STARTUPINFO si1, si2;
+	PROCESS_INFORMATION pi1, pi2;
+	DWORD dwRes;
+	BOOL out_is_err1, out_is_err2;
 
-	return true; /* TODO replace with actual exit status */
+	HANDLE hFileIn1 = NULL, hFileOut1 = NULL, hFileErr1 = NULL;
+	HANDLE hFileIn2 = NULL, hFileOut2 = NULL, hFileErr2 = NULL;
+
+	/* Init security attributes structure */
+	ZeroMemory(&sa, sizeof(sa));
+	sa.bInheritHandle = TRUE;
+
+	/* Init processes */
+	ZeroMemory(&pi1, sizeof(pi1));
+	ZeroMemory(&pi2, sizeof(pi2));
+
+	/* Create pipe */
+	bRes = CreatePipe(&hRead, &hWrite, &sa, 0);
+	DIE(bRes == FALSE, "CreatePipe");
+
+	/* Redirect first process output */
+	redirect_handle(&si1, hWrite, STD_OUTPUT_HANDLE);
+
+	/* Execute the first process */
+	if (cmd1->op == OP_NONE) {
+		LPTSTR argv;
+		simple_command_t *s1 = cmd1->scmd;
+
+		argv = get_argv(s1);
+
+		/*
+		si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+		si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+		si.hStdError = GetStdHandle(STD_ERROR_HANDLE);*/
+
+		out_is_err1 = redirect_std_handles(&si1, &hFileIn1, &hFileOut1, &hFileErr1, s1, EXTERNAL);
+
+		bRes = CreateProcess(
+			NULL,
+			argv,
+			NULL,
+			NULL,
+			TRUE,
+			0,
+			NULL,
+			NULL,
+			&si1,
+			&pi1);
+		DIE(bRes == FALSE, "Create Process1");
+
+		free(argv);
+	}
+
+
+	DIE(CloseHandle(hWrite) == FALSE, "CloseHandleWrite");
+
+	/* Redirect second process input */
+	redirect_handle(&si2, hRead, STD_INPUT_HANDLE);
+
+
+	DIE(CloseHandle(hRead) == FALSE, "CloseHandleRead");
+
+	/*
+		RedirectHandle(&si1, hWrite, STD_OUTPUT_HANDLE);
+
+		bRes = CreateProcess(
+			NULL,
+			command1,
+			NULL,
+			NULL,
+			TRUE,
+			0,
+			NULL,
+			NULL,
+			&si1,
+			&pi1);
+		DIE(bRes == FALSE, "Create Process1");
+
+		CloseHandle(hWrite);
+
+
+		RedirectHandle(&si2, hRead, STD_INPUT_HANDLE);
+
+		bRes = CreateProcess(
+			NULL,
+			command2,
+			NULL,
+			NULL,
+			TRUE,
+			0,
+			NULL,
+			NULL,
+			&si2,
+			&pi2);
+		DIE(bRes == FALSE, "Create Process2");
+
+		CloseHandle(hRead);
+
+		dwRes = WaitForSingleObject(pi1.hProcess, INFINITE);
+		DIE(dwRes == WAIT_FAILED, "WaitForSingleObject");
+
+		CloseProcess(&pi1);
+
+		dwRes = WaitForSingleObject(pi2.hProcess, INFINITE);
+		DIE(dwRes == WAIT_FAILED, "WaitForSingleObject");
+
+		CloseProcess(&pi2);
+	*/
+
+	return 0; /* TODO replace with actual exit status */
 }
 
 /**
@@ -486,8 +608,8 @@ int parse_command(command_t *c, int level, command_t *father, void *h)
 	switch (c->op) {
 	case OP_SEQUENTIAL:
 		/* TODO execute the commands one after the other */
-		ret = parse_command(c->cmd1, level + 1, c, (HANDLE*)h);
-		ret = parse_command(c->cmd2, level + 1, c, (HANDLE*)h);
+		ret = parse_command(c->cmd1, level + 1, c, h);
+		ret = parse_command(c->cmd2, level + 1, c, h);
 		return ret;
 
 	case OP_PARALLEL:
@@ -497,18 +619,18 @@ int parse_command(command_t *c, int level, command_t *father, void *h)
 	case OP_CONDITIONAL_NZERO:
 		/* TODO execute the second command only if the first one
 		 * returns non zero */
-		ret = parse_command(c->cmd1, level + 1, c, (HANDLE *)h);
+		ret = parse_command(c->cmd1, level + 1, c, h);
 		if (ret != 0) {
-			ret = parse_command(c->cmd2, level + 1, c, (HANDLE *)h);
+			ret = parse_command(c->cmd2, level + 1, c, h);
 		}
 		return ret;
 
 	case OP_CONDITIONAL_ZERO:
 		/* TODO execute the second command only if the first one
 		 * returns zero */
-		ret = parse_command(c->cmd1, level + 1, c, (HANDLE *)h);
+		ret = parse_command(c->cmd1, level + 1, c, h);
 		if (ret == 0) {
-			ret = parse_command(c->cmd2, level + 1, c, (HANDLE *)h);
+			ret = parse_command(c->cmd2, level + 1, c, h);
 		}
 		return ret;
 

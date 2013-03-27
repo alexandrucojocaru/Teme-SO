@@ -22,13 +22,108 @@
 #define WRITE		1
 
 /**
+ * Redirect a file descriptor to a file
+ * @filedes  - file descriptor to be redirected
+ * @filename - filename used for redirection
+ * @mode	 - mode of redirection (append or normal)
+ */
+static void do_redirect(int filedes, const char *filename, int mode)
+{
+	int ret;
+	int fd;
+
+	switch(filedes) {
+	case STDIN_FILENO:
+		fd = open(filename, O_RDONLY);
+		break;
+	case STDOUT_FILENO:
+	case STDERR_FILENO:
+		if (mode == APPEND)
+			fd = open(filename, O_WRONLY | O_CREAT | O_APPEND, 0644);
+		else
+			fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		DIE(fd < 0, "open");
+		break;
+	default:
+		break;
+	}
+
+	ret = dup2(fd, filedes);
+	DIE(ret < 0, "dup2");
+
+	close(fd);
+}
+
+/**
+ * Redirect all std file descriptors
+ */
+static void redirect_std_files(char *file_in, char *file_out, char *file_err,
+		int mode_out, int mode_err)
+{
+	if (file_in != NULL)
+		do_redirect(STDIN_FILENO, file_in, NORMAL);
+	if (file_out != NULL)
+		do_redirect(STDOUT_FILENO, file_out, mode_out);
+	if (file_err != NULL) {
+		if (file_out != NULL && strcmp(file_out, file_err) == 0) {
+			int ret = dup2(STDOUT_FILENO, STDERR_FILENO);
+			DIE(ret < 0, "dup2");
+		}
+		else
+			do_redirect(STDERR_FILENO, file_err, mode_err);
+	}
+}
+
+/**
  * Internal change-directory command.
  */
-static bool shell_cd(word_t *dir)
+static int shell_cd(word_t *dir, simple_command_t *s)
 {
 	/* TODO execute cd */
+	int ret;
+	char *directory = NULL;
+	char *file_out = NULL, *file_err = NULL;
+	int fd;
 
-	return 0;
+	file_out = get_word(s->out);
+	file_err = get_word(s->err);
+
+	if (file_out) {
+		fd = open(file_out, O_WRONLY | O_CREAT, 0644);
+		close(fd);
+	}
+	if (file_err) {
+		fd = open(file_err, O_WRONLY | O_CREAT, 0644);
+		close(fd);
+	}
+
+	free(file_out);
+	free(file_err);
+
+	directory = get_word(dir);
+
+	ret = chdir(directory);
+
+	free(directory);
+
+	/*if (hFileIn != NULL && hFileIn != INVALID_HANDLE_VALUE) {
+		DIE(CloseHandle(hFileIn) == FALSE, "CloseHandleIn");
+		hFileIn = INVALID_HANDLE_VALUE;
+	}
+	if (hFileOut != NULL && hFileOut != INVALID_HANDLE_VALUE) {
+		DIE(CloseHandle(hFileOut) == FALSE, "CloseHandleOut");
+		hFileOut = INVALID_HANDLE_VALUE;
+	}
+	if (hFileErr != NULL && hFileErr != INVALID_HANDLE_VALUE && out_is_err == FALSE) {
+		DIE(CloseHandle(hFileErr) == FALSE, "CloseHandleErr");
+		hFileErr = INVALID_HANDLE_VALUE;
+	}
+
+	SetStdHandle(STD_INPUT_HANDLE, GetStdHandle(STD_INPUT_HANDLE));
+	SetStdHandle(STD_OUTPUT_HANDLE, GetStdHandle(STD_OUTPUT_HANDLE));
+	SetStdHandle(STD_ERROR_HANDLE, GetStdHandle(STD_ERROR_HANDLE));*/
+
+	return ret;
 }
 
 /**
@@ -36,9 +131,7 @@ static bool shell_cd(word_t *dir)
  */
 static int shell_exit()
 {
-	/* TODO execute exit/quit */
-
-	return 0; /* TODO replace with actual exit code */
+	return SHELL_EXIT;
 }
 
 /**
@@ -138,28 +231,131 @@ static char **get_argv(simple_command_t *command, int *size)
 	return argv;
 }
 
+static int run_simple_command(simple_command_t *s, char **argv,
+		int level, command_t *father)
+{
+	/* TODO if external command:
+		 * 	1. fork new process
+		 * 	2c. perform redirections in child
+		 *	3c. load executable in child
+		 * 	2. wait for child
+		 *  3. return exit status
+	 */
+	pid_t pid, wait_ret;
+	int status;
+
+	pid = fork();
+	switch (pid) {
+	case -1:	/* error */
+		DIE(true, "fork");
+		break;
+
+	case 0:	{ /* child process */
+		char *file_in = NULL, *file_out = NULL, *file_err = NULL;
+		int mode_out, mode_err;
+
+		file_in = get_word(s->in);
+		file_out = get_word(s->out);
+		file_err = get_word(s->err);
+
+		mode_out = (s->io_flags & IO_OUT_APPEND) == IO_OUT_APPEND;
+		mode_err = (s->io_flags & IO_ERR_APPEND) == IO_ERR_APPEND;
+
+		redirect_std_files(file_in, file_out, file_err, mode_out, mode_err);
+		free(file_in);
+		free(file_out);
+		free(file_err);
+
+		execvp(argv[0], (char *const *) argv);
+
+		fprintf(stderr, "Execution failed for '%s'\n", argv[0]);
+		fflush(stdout);
+
+		exit(EXIT_FAILURE);
+	}
+
+	default:	/* parent process */
+		wait_ret = waitpid(pid, &status, 0);
+		DIE(wait_ret < 0, "waitpid");
+		if (WIFEXITED(status))
+			/*printf("Child process (pid %d) terminated normally, "
+					"with exit code %d\n",
+					pid, WEXITSTATUS(status));*/
+			return WEXITSTATUS(status);
+
+	}
+	return 0;
+}
+
+/**
+ * Set environment variable
+ */
+static int set_var(const char *var, const char *value)
+{
+	return setenv(var, value, 1);
+}
+
 /**
  * Parse a simple command (internal, environment variable assignment,
  * external command).
  */
 static int parse_simple(simple_command_t *s, int level, command_t *father)
 {
+	char *verb = NULL;
+	char **argv = NULL;
+	int size;
+	int ret = 0;
 	/* TODO sanity checks */
+	assert(s != NULL);
+	assert(s->up == father);
 
+	verb = get_word(s->verb);
 	/* TODO if builtin command, execute the command */
+	if (strcmp(verb, "exit") == 0 || strcmp(verb, "quit") == 0) {
+		ret = shell_exit();
+		goto clear;
+	}
+	if (strcmp(verb, "cd") == 0) {
+		ret = shell_cd(s->params, s);	/* Only the first parameter matters on cd */
+		goto clear;
+	}
 
 	/* TODO if variable assignment, execute the assignment and return
          * the exit status */
+	if (s->verb->next_part != NULL) {
+		char second[MAX_SIZE_ENVIRONMENT_VARIABLE];
+		char third[MAX_SIZE_ENVIRONMENT_VARIABLE];
+		strcpy(second, s->verb->next_part->string);
+		if (second != NULL && (strcmp(second, "=") == 0)) {
+			if (s->verb->next_part->next_part != NULL) {
+				strcpy(third, s->verb->next_part->next_part->string);
+				if (third != NULL) {
+					ret = set_var(s->verb->string, third);
+				}
+				else
+					ret = VAR_ASSIGN_FAILED;
+			}
+			else
+				ret = VAR_ASSIGN_FAILED;
+			goto clear;
+		}
+	}
 
 	/* TODO if external command:
-         *   1. fork new process
-	 *     2c. perform redirections in child
-         *     3c. load executable in child
-         *   2. wait for child
-         *   3. return exit status
+	 	 * 	1. fork new process
+         * 	2c. perform redirections in child
+         *	3c. load executable in child
+         * 	2. wait for child
+         *  3. return exit status
 	 */
+	argv = get_argv(s, &size);
+	ret = run_simple_command(s, argv, level, father);
+	free(argv);
 
-	return 0; /* TODO replace with actual exit status */
+clear:
+	free(verb);
+
+	return ret; /* TODO replace with actual exit status */
 }
 
 /**
@@ -187,18 +383,28 @@ static bool do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *f
  */
 int parse_command(command_t *c, int level, command_t *father)
 {
+	int ret = 0;
+
 	/* TODO sanity checks */
+	assert(c != NULL);
+	assert(c->up == father);
 
 	if (c->op == OP_NONE) {
 		/* TODO execute a simple command */
+		assert(c->cmd1 == NULL);
+		assert(c->cmd2 == NULL);
 
-		return 0; /* TODO replace with actual exit code of command */
+		ret = parse_simple(c->scmd, level + 1, c);
+
+		return ret; /* TODO replace with actual exit code of command */
 	}
 
 	switch (c->op) {
 	case OP_SEQUENTIAL:
 		/* TODO execute the commands one after the other */
-		break;
+		ret = parse_command(c->cmd1, level + 1, c);
+		ret = parse_command(c->cmd2, level + 1, c);
+		return ret;
 
 	case OP_PARALLEL:
 		/* TODO execute the commands simultaneously */
@@ -207,12 +413,20 @@ int parse_command(command_t *c, int level, command_t *father)
 	case OP_CONDITIONAL_NZERO:
 		/* TODO execute the second command only if the first one
                  * returns non zero */
-		break;
+		ret = parse_command(c->cmd1, level + 1, c);
+		if (ret != 0) {
+			ret = parse_command(c->cmd2, level + 1, c);
+		}
+		return ret;
 
 	case OP_CONDITIONAL_ZERO:
 		/* TODO execute the second command only if the first one
                  * returns zero */
-		break;
+		ret = parse_command(c->cmd1, level + 1, c);
+		if (ret == 0) {
+			ret = parse_command(c->cmd2, level + 1, c);
+		}
+		return ret;
 
 	case OP_PIPE:
 		/* TODO redirect the output of the first command to the
@@ -223,7 +437,7 @@ int parse_command(command_t *c, int level, command_t *father)
 		assert(false);
 	}
 
-	return 0; /* TODO replace with actual exit code of command */
+	return ret; /* TODO replace with actual exit code of command */
 }
 
 /**
