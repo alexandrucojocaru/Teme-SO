@@ -1,6 +1,8 @@
 /**
  * Operating Sytems 2013 - Assignment 1
  *
+ * Constantin Serban-Radoi 333CA
+ * March 2013
  */
 
 #include <assert.h>
@@ -22,7 +24,7 @@
 #define WRITE		1
 
 /**
- * Redirect a file descriptor to a file
+ * Redirect a file descriptor to a file given its filename
  * @filedes  - file descriptor to be redirected
  * @filename - filename used for redirection
  * @mode	 - mode of redirection (append or normal)
@@ -35,6 +37,7 @@ static void do_redirect(int filedes, const char *filename, int mode)
 	switch(filedes) {
 	case STDIN_FILENO:
 		fd = open(filename, O_RDONLY);
+		DIE(fd < 0, "open");
 		break;
 	case STDOUT_FILENO:
 	case STDERR_FILENO:
@@ -54,6 +57,9 @@ static void do_redirect(int filedes, const char *filename, int mode)
 	close(fd);
 }
 
+/**
+ * Redirect a file descriptor to another one
+ */
 static void do_redirect_descriptor(int std_filedes, int new_fd)
 {
 	int ret;
@@ -88,7 +94,6 @@ static void redirect_std_files(char *file_in, char *file_out, char *file_err,
  */
 static int shell_cd(word_t *dir, simple_command_t *s)
 {
-	/* TODO execute cd */
 	int ret;
 	char *directory = NULL;
 	char *file_out = NULL, *file_err = NULL;
@@ -99,10 +104,12 @@ static int shell_cd(word_t *dir, simple_command_t *s)
 
 	if (file_out) {
 		fd = open(file_out, O_WRONLY | O_CREAT, 0644);
+		DIE(fd < 0, "open");
 		close(fd);
 	}
 	if (file_err) {
 		fd = open(file_err, O_WRONLY | O_CREAT, 0644);
+		DIE(fd < 0, "open");
 		close(fd);
 	}
 
@@ -114,24 +121,6 @@ static int shell_cd(word_t *dir, simple_command_t *s)
 	ret = chdir(directory);
 
 	free(directory);
-
-	/*if (hFileIn != NULL && hFileIn != INVALID_HANDLE_VALUE) {
-		DIE(CloseHandle(hFileIn) == FALSE, "CloseHandleIn");
-		hFileIn = INVALID_HANDLE_VALUE;
-	}
-	if (hFileOut != NULL && hFileOut != INVALID_HANDLE_VALUE) {
-		DIE(CloseHandle(hFileOut) == FALSE, "CloseHandleOut");
-		hFileOut = INVALID_HANDLE_VALUE;
-	}
-	if (hFileErr != NULL && hFileErr != INVALID_HANDLE_VALUE && out_is_err == FALSE) {
-		DIE(CloseHandle(hFileErr) == FALSE, "CloseHandleErr");
-		hFileErr = INVALID_HANDLE_VALUE;
-	}
-
-	SetStdHandle(STD_INPUT_HANDLE, GetStdHandle(STD_INPUT_HANDLE));
-	SetStdHandle(STD_OUTPUT_HANDLE, GetStdHandle(STD_OUTPUT_HANDLE));
-	SetStdHandle(STD_ERROR_HANDLE, GetStdHandle(STD_ERROR_HANDLE));*/
-
 	return ret;
 }
 
@@ -146,7 +135,7 @@ static int shell_exit()
 /**
  * Concatenate parts of the word to obtain the command
  */
-static char *get_word(word_t *s)
+char *get_word(word_t *s)
 {
 	int string_length = 0;
 	int substring_length = 0;
@@ -243,13 +232,6 @@ static char **get_argv(simple_command_t *command, int *size)
 static int run_simple_command(simple_command_t *s, char **argv,
 		int level, command_t *father, int pipe_read, int pipe_write, int size)
 {
-	/* TODO if external command:
-		 * 	1. fork new process
-		 * 	2c. perform redirections in child
-		 *	3c. load executable in child
-		 * 	2. wait for child
-		 *  3. return exit status
-	 */
 	pid_t pid, wait_ret;
 	int status;
 
@@ -263,6 +245,7 @@ static int run_simple_command(simple_command_t *s, char **argv,
 		char *file_in = NULL, *file_out = NULL, *file_err = NULL;
 		int mode_out, mode_err;
 
+		/* Perform redirections */
 		file_in = get_word(s->in);
 		file_out = get_word(s->out);
 		file_err = get_word(s->err);
@@ -270,6 +253,7 @@ static int run_simple_command(simple_command_t *s, char **argv,
 		mode_out = (s->io_flags & IO_OUT_APPEND) == IO_OUT_APPEND;
 		mode_err = (s->io_flags & IO_ERR_APPEND) == IO_ERR_APPEND;
 
+		/* Pipe redirections */
 		if (pipe_read != INVALID_PIPE) {
 			do_redirect_descriptor(STDIN_FILENO, pipe_read);
 			free(file_in);
@@ -281,6 +265,7 @@ static int run_simple_command(simple_command_t *s, char **argv,
 			file_out = NULL;
 		}
 
+		/* Standard redirections */
 		redirect_std_files(file_in, file_out, file_err, mode_out, mode_err);
 		free(file_in);
 		free(file_out);
@@ -288,6 +273,7 @@ static int run_simple_command(simple_command_t *s, char **argv,
 
 		execvp(argv[0], (char *const *) argv);
 
+		/* Execution of child process failed. Cleanup */
 		fprintf(stderr, "Execution failed for '%s'\n", argv[0]);
 		fflush(stdout);
 		{
@@ -307,9 +293,6 @@ static int run_simple_command(simple_command_t *s, char **argv,
 		wait_ret = waitpid(pid, &status, 0);
 		DIE(wait_ret < 0, "waitpid");
 		if (WIFEXITED(status))
-			/*printf("Child process (pid %d) terminated normally, "
-					"with exit code %d\n",
-					pid, WEXITSTATUS(status));*/
 			return WEXITSTATUS(status);
 
 	}
@@ -335,23 +318,23 @@ static int parse_simple(simple_command_t *s, int level, command_t *father,
 	char **argv = NULL;
 	int size;
 	int ret = 0;
-	/* TODO sanity checks */
+
 	assert(s != NULL);
 	assert(s->up == father);
 
 	verb = get_word(s->verb);
-	/* TODO if builtin command, execute the command */
+	/* Built-in commands */
 	if (strcmp(verb, "exit") == 0 || strcmp(verb, "quit") == 0) {
 		ret = shell_exit();
 		goto clear;
 	}
 	if (strcmp(verb, "cd") == 0) {
-		ret = shell_cd(s->params, s);	/* Only the first parameter matters on cd */
+		/* Only the first parameter is used in cd */
+		ret = shell_cd(s->params, s);
 		goto clear;
 	}
 
-	/* TODO if variable assignment, execute the assignment and return
-         * the exit status */
+	/* Variable assignment execution and return the exit status */
 	if (s->verb->next_part != NULL) {
 		char second[MAX_SIZE_ENVIRONMENT_VARIABLE];
 		char third[MAX_SIZE_ENVIRONMENT_VARIABLE];
@@ -371,17 +354,12 @@ static int parse_simple(simple_command_t *s, int level, command_t *father,
 		}
 	}
 
-	/* TODO if external command:
-	 	 * 	1. fork new process
-         * 	2c. perform redirections in child
-         *	3c. load executable in child
-         * 	2. wait for child
-         *  3. return exit status
-	 */
+	/* Simple command execution */
 	argv = get_argv(s, &size);
 	ret = run_simple_command(s, argv, level, father, pipe_read, pipe_write,
 			size);
 	{
+		/* Cleanup */
 		int i;
 		for (i = 0; i < size; ++i) {
 			free(argv[i]);
@@ -394,18 +372,18 @@ static int parse_simple(simple_command_t *s, int level, command_t *father,
 clear:
 	free(verb);
 
-	return ret; /* TODO replace with actual exit status */
+	return ret;
 }
 
 /**
  * Process two commands in parallel, by creating two children.
  */
-static int do_in_parallel(command_t *cmd1, command_t *cmd2, int level, command_t *father,
-		int pipe_read, int pipe_write)
+static int do_in_parallel(command_t *cmd1, command_t *cmd2, int level,
+		command_t *father, int pipe_read, int pipe_write)
 {
 	assert(cmd1 != NULL && cmd1->up == father);
 	assert(cmd2 != NULL && cmd2->up == father);
-	/* TODO execute cmd1 and cmd2 simultaneously */
+
 	pid_t pid, wait_ret;
 	int status;
 	int ret_val = 0;
@@ -429,16 +407,15 @@ static int do_in_parallel(command_t *cmd1, command_t *cmd2, int level, command_t
 		DIE(wait_ret < 0, "waitpid");
 	}
 
-	return ret_val; /* TODO replace with actual exit status */
+	return ret_val;
 }
 
 /**
  * Run commands by creating an anonymous pipe (cmd1 | cmd2)
  */
-static int do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *father,
-		int pipe_read, int pipe_write)
+static int do_on_pipe(command_t *cmd1, command_t *cmd2, int level,
+		command_t *father, int pipe_read, int pipe_write)
 {
-	/* TODO redirect the output of cmd1 to the input of cmd2 */
 	assert(cmd1 != NULL && cmd1->up == father);
 	assert(cmd2 != NULL && cmd2->up == father);
 	pid_t pid, wait_ret;
@@ -447,6 +424,7 @@ static int do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *fa
 	int pipefd[2];
 	int pipe_ret;
 
+	/* Create pipe */
 	pipe_ret = pipe(pipefd);
 	DIE(pipe_ret < 0, "pipe");
 
@@ -459,19 +437,21 @@ static int do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *fa
 	case 0:	{ /* child process */
 		int ret;
 		close(pipefd[0]);
+		/* Send the created pipe write down in the tree */
 		ret = parse_command(cmd1, level + 1, father, pipe_read, pipefd[1]);
 		exit(ret);
 	}
 
 	default:	/* parent process */
 		close(pipefd[1]);
+		/* Send the created pipe read down in the tree */
 		ret_val = parse_command(cmd2, level + 1, father, pipefd[0], pipe_write);
 
 		wait_ret = waitpid(pid, &status, 0);
 		DIE(wait_ret < 0, "waitpid");
 	}
 
-	return ret_val; /* TODO replace with actual exit status */
+	return ret_val;
 }
 
 /**
@@ -482,35 +462,34 @@ int parse_command(command_t *c, int level, command_t *father, int pipe_read,
 {
 	int ret = 0;
 
-	/* TODO sanity checks */
 	assert(c != NULL);
 	assert(c->up == father);
 
+	/* Simple command */
 	if (c->op == OP_NONE) {
-		/* TODO execute a simple command */
 		assert(c->cmd1 == NULL);
 		assert(c->cmd2 == NULL);
 
 		ret = parse_simple(c->scmd, level + 1, c, pipe_read, pipe_write);
 
-		return ret; /* TODO replace with actual exit code of command */
+		return ret;
 	}
 
 	switch (c->op) {
 	case OP_SEQUENTIAL:
-		/* TODO execute the commands one after the other */
+		/* Sequential commands */
 		ret = parse_command(c->cmd1, level + 1, c, pipe_read, pipe_write);
 		ret = parse_command(c->cmd2, level + 1, c, pipe_read, pipe_write);
 		return ret;
 
 	case OP_PARALLEL:
-		/* TODO execute the commands simultaneously */
-		ret = do_in_parallel(c->cmd1, c->cmd2, level + 1, c, pipe_read, pipe_write);
+		/* Execute the commands simultaneously */
+		ret = do_in_parallel(c->cmd1, c->cmd2, level + 1, c, pipe_read,
+				pipe_write);
 		return ret;
 
 	case OP_CONDITIONAL_NZERO:
-		/* TODO execute the second command only if the first one
-                 * returns non zero */
+		/* Execute the second command only if the first one returns non zero */
 		ret = parse_command(c->cmd1, level + 1, c, pipe_read, pipe_write);
 		if (ret != 0) {
 			ret = parse_command(c->cmd2, level + 1, c, pipe_read, pipe_write);
@@ -518,8 +497,7 @@ int parse_command(command_t *c, int level, command_t *father, int pipe_read,
 		return ret;
 
 	case OP_CONDITIONAL_ZERO:
-		/* TODO execute the second command only if the first one
-                 * returns zero */
+		/* Execute the second command only if the first one returns zero */
 		ret = parse_command(c->cmd1, level + 1, c, pipe_read, pipe_write);
 		if (ret == 0) {
 			ret = parse_command(c->cmd2, level + 1, c, pipe_read, pipe_write);
@@ -527,8 +505,7 @@ int parse_command(command_t *c, int level, command_t *father, int pipe_read,
 		return ret;
 
 	case OP_PIPE:
-		/* TODO redirect the output of the first command to the
-		 * input of the second */
+		/* Redirect output of the first command to the input of the second */
 		ret = do_on_pipe(c->cmd1, c->cmd2, level + 1, c, pipe_read, pipe_write);
 		break;
 
@@ -536,7 +513,7 @@ int parse_command(command_t *c, int level, command_t *father, int pipe_read,
 		assert(false);
 	}
 
-	return ret; /* TODO replace with actual exit code of command */
+	return ret;
 }
 
 /**

@@ -1,6 +1,8 @@
 /**
  * Operating Sytems 2013 - Assignment 1
  *
+ * Constantin Serban-Radoi 333CA
+ * March 2013
  */
 
 #ifndef _UTILS_H
@@ -45,6 +47,6 @@ int parse_command(command_t *, int, command_t *, int, int);
 /**
  * Concatenate parts of the word to obtain the command
  */
-static char *get_word(word_t *s);
+char *get_word(word_t *s);
 
 #endif

@@ -1,6 +1,8 @@
 /**
  * Operating Sytems 2013 - Assignment 1
  *
+ * Constantin Serban-Radoi 333CA
+ * March 2013
  */
 
 #include <stdio.h>

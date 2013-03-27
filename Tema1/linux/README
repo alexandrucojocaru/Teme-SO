@@ -1,0 +1,34 @@
+*** Tema0 SO - Mini-Shell ***
+*** Șerban-Radoi Constantin 333CA ***
+*** Martie 2013 ***
+
+** Descriere **
+	Tema constă în implementarea unui mini shell.
+
+** Mod compilare **
+	make -f GNUmakefile
+
+** Pentru a rula **
+	./mini-shell
+
+** Pentru a ieși din shell se rulează
+	exit sau quit
+
+** Listă fișiere **
+	* main.c		- Fișier ce conține functia main
+	* utils.h		- Fișier ce conține antete și macrouri utile 
+	* utils-lin.c	- Implementarea funcțiilor care definesc shell-ul
+	* parser.h		- Declarația funcțiilor parserului
+	* parser.tab.h	- Declarația funcțiilor generate de parser-ul flex
+	* parser.tab.c	- Implementarea funcțiilor generate de parser-ul flex
+	* parser.yy.c	- Implementarea funcțiilor generate de yacc
+	* Makefile      - Fișier makefile
+	* README        - Acest fișier
+
+** Detalii implementare **
+	Pentru rularea comenzilor simple am folosit fork și execvp; Dacă era nevoie
+să fie rulate în paralel sau cu pipe-uri, am folosit doar fork pentru a împărți
+comanda în două: o parte la procesul copil, alta la procesul părinte.
+
+	Alte detalii se regăsesc și în comentariile din cod și nu cred că e necesar
+să le repet aici.
