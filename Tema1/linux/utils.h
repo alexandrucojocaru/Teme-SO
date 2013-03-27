@@ -38,7 +38,7 @@ char *read_line();
 /**
  * Parse and execute a command.
  */
-int parse_command(command_t *, int, command_t *);
+int parse_command(command_t *, int, command_t *, int, int);
 
 /**
  * Concatenate parts of the word to obtain the command

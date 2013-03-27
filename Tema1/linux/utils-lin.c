@@ -299,7 +299,8 @@ static int set_var(const char *var, const char *value)
  * Parse a simple command (internal, environment variable assignment,
  * external command).
  */
-static int parse_simple(simple_command_t *s, int level, command_t *father)
+static int parse_simple(simple_command_t *s, int level, command_t *father,
+		int pipe_read, int pipe_write)
 {
 	char *verb = NULL;
 	char **argv = NULL;
@@ -361,27 +362,79 @@ clear:
 /**
  * Process two commands in parallel, by creating two children.
  */
-static bool do_in_parallel(command_t *cmd1, command_t *cmd2, int level, command_t *father)
+static int do_in_parallel(command_t *cmd1, command_t *cmd2, int level, command_t *father,
+		int pipe_read, int pipe_write)
 {
+	assert(cmd1 != NULL && cmd1->up == father);
+	assert(cmd2 != NULL && cmd2->up == father);
 	/* TODO execute cmd1 and cmd2 simultaneously */
+	pid_t pid, wait_ret;
+	int status;
+	int ret_val = 0;
 
-	return true; /* TODO replace with actual exit status */
+	pid = fork();
+	switch (pid) {
+	case -1:	/* error */
+		DIE(true, "fork");
+		break;
+
+	case 0:	{ /* child process */
+		int ret;
+		ret = parse_command(cmd1, level + 1, father, pipe_read, pipe_write);
+		exit(ret);
+	}
+
+	default:	/* parent process */
+		ret_val = parse_command(cmd2, level + 1, father, pipe_read, pipe_write);
+
+		wait_ret = waitpid(pid, &status, 0);
+		DIE(wait_ret < 0, "waitpid");
+	}
+
+	return ret_val; /* TODO replace with actual exit status */
 }
 
 /**
  * Run commands by creating an anonymous pipe (cmd1 | cmd2)
  */
-static bool do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *father)
+static int do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *father,
+		int pipe_read, int pipe_write)
 {
 	/* TODO redirect the output of cmd1 to the input of cmd2 */
+	assert(cmd1 != NULL && cmd1->up == father);
+	assert(cmd2 != NULL && cmd2->up == father);
+	/* TODO execute cmd1 and cmd2 simultaneously */
+	pid_t pid, wait_ret;
+	int status;
+	int ret_val = 0;
 
-	return true; /* TODO replace with actual exit status */
+	pid = fork();
+	switch (pid) {
+	case -1:	/* error */
+		DIE(true, "fork");
+		break;
+
+	case 0:	{ /* child process */
+		int ret;
+		ret = parse_command(cmd1, level + 1, father, pipe_read, pipe_write);
+		exit(ret);
+	}
+
+	default:	/* parent process */
+		ret_val = parse_command(cmd2, level + 1, father, pipe_read, pipe_write);
+
+		wait_ret = waitpid(pid, &status, 0);
+		DIE(wait_ret < 0, "waitpid");
+	}
+
+	return ret_val; /* TODO replace with actual exit status */
 }
 
 /**
  * Parse and execute a command.
  */
-int parse_command(command_t *c, int level, command_t *father)
+int parse_command(command_t *c, int level, command_t *father, int pipe_read,
+		int pipe_write)
 {
 	int ret = 0;
 
@@ -394,7 +447,7 @@ int parse_command(command_t *c, int level, command_t *father)
 		assert(c->cmd1 == NULL);
 		assert(c->cmd2 == NULL);
 
-		ret = parse_simple(c->scmd, level + 1, c);
+		ret = parse_simple(c->scmd, level + 1, c, pipe_read, pipe_write);
 
 		return ret; /* TODO replace with actual exit code of command */
 	}
@@ -402,29 +455,30 @@ int parse_command(command_t *c, int level, command_t *father)
 	switch (c->op) {
 	case OP_SEQUENTIAL:
 		/* TODO execute the commands one after the other */
-		ret = parse_command(c->cmd1, level + 1, c);
-		ret = parse_command(c->cmd2, level + 1, c);
+		ret = parse_command(c->cmd1, level + 1, c, pipe_read, pipe_write);
+		ret = parse_command(c->cmd2, level + 1, c, pipe_read, pipe_write);
 		return ret;
 
 	case OP_PARALLEL:
 		/* TODO execute the commands simultaneously */
+		do_in_parallel(c->cmd1, c->cmd2, level + 1, c, pipe_read, pipe_write);
 		break;
 
 	case OP_CONDITIONAL_NZERO:
 		/* TODO execute the second command only if the first one
                  * returns non zero */
-		ret = parse_command(c->cmd1, level + 1, c);
+		ret = parse_command(c->cmd1, level + 1, c, pipe_read, pipe_write);
 		if (ret != 0) {
-			ret = parse_command(c->cmd2, level + 1, c);
+			ret = parse_command(c->cmd2, level + 1, c, pipe_read, pipe_write);
 		}
 		return ret;
 
 	case OP_CONDITIONAL_ZERO:
 		/* TODO execute the second command only if the first one
                  * returns zero */
-		ret = parse_command(c->cmd1, level + 1, c);
+		ret = parse_command(c->cmd1, level + 1, c, pipe_read, pipe_write);
 		if (ret == 0) {
-			ret = parse_command(c->cmd2, level + 1, c);
+			ret = parse_command(c->cmd2, level + 1, c, pipe_read, pipe_write);
 		}
 		return ret;
 
