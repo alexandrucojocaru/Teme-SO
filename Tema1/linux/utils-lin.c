@@ -54,6 +54,15 @@ static void do_redirect(int filedes, const char *filename, int mode)
 	close(fd);
 }
 
+static void do_redirect_descriptor(int std_filedes, int new_fd)
+{
+	int ret;
+	ret = dup2(new_fd, std_filedes);
+	DIE(ret < 0, "dup2");
+
+	close(new_fd);
+}
+
 /**
  * Redirect all std file descriptors
  */
@@ -232,7 +241,7 @@ static char **get_argv(simple_command_t *command, int *size)
 }
 
 static int run_simple_command(simple_command_t *s, char **argv,
-		int level, command_t *father)
+		int level, command_t *father, int pipe_read, int pipe_write, int size)
 {
 	/* TODO if external command:
 		 * 	1. fork new process
@@ -261,6 +270,17 @@ static int run_simple_command(simple_command_t *s, char **argv,
 		mode_out = (s->io_flags & IO_OUT_APPEND) == IO_OUT_APPEND;
 		mode_err = (s->io_flags & IO_ERR_APPEND) == IO_ERR_APPEND;
 
+		if (pipe_read != INVALID_PIPE) {
+			do_redirect_descriptor(STDIN_FILENO, pipe_read);
+			free(file_in);
+			file_in = NULL;
+		}
+		if (pipe_write != INVALID_PIPE) {
+			do_redirect_descriptor(STDOUT_FILENO, pipe_write);
+			free(file_out);
+			file_out = NULL;
+		}
+
 		redirect_std_files(file_in, file_out, file_err, mode_out, mode_err);
 		free(file_in);
 		free(file_out);
@@ -270,6 +290,15 @@ static int run_simple_command(simple_command_t *s, char **argv,
 
 		fprintf(stderr, "Execution failed for '%s'\n", argv[0]);
 		fflush(stdout);
+		{
+			int i;
+			for (i = 0; i < size; ++i) {
+				free(argv[i]);
+				argv[i] = NULL;
+			}
+			free(argv);
+			argv = NULL;
+		}
 
 		exit(EXIT_FAILURE);
 	}
@@ -350,8 +379,17 @@ static int parse_simple(simple_command_t *s, int level, command_t *father,
          *  3. return exit status
 	 */
 	argv = get_argv(s, &size);
-	ret = run_simple_command(s, argv, level, father);
-	free(argv);
+	ret = run_simple_command(s, argv, level, father, pipe_read, pipe_write,
+			size);
+	{
+		int i;
+		for (i = 0; i < size; ++i) {
+			free(argv[i]);
+			argv[i] = NULL;
+		}
+		free(argv);
+		argv = NULL;
+	}
 
 clear:
 	free(verb);
@@ -403,10 +441,14 @@ static int do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *fa
 	/* TODO redirect the output of cmd1 to the input of cmd2 */
 	assert(cmd1 != NULL && cmd1->up == father);
 	assert(cmd2 != NULL && cmd2->up == father);
-	/* TODO execute cmd1 and cmd2 simultaneously */
 	pid_t pid, wait_ret;
 	int status;
 	int ret_val = 0;
+	int pipefd[2];
+	int pipe_ret;
+
+	pipe_ret = pipe(pipefd);
+	DIE(pipe_ret < 0, "pipe");
 
 	pid = fork();
 	switch (pid) {
@@ -416,12 +458,14 @@ static int do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *fa
 
 	case 0:	{ /* child process */
 		int ret;
-		ret = parse_command(cmd1, level + 1, father, pipe_read, pipe_write);
+		close(pipefd[0]);
+		ret = parse_command(cmd1, level + 1, father, pipe_read, pipefd[1]);
 		exit(ret);
 	}
 
 	default:	/* parent process */
-		ret_val = parse_command(cmd2, level + 1, father, pipe_read, pipe_write);
+		close(pipefd[1]);
+		ret_val = parse_command(cmd2, level + 1, father, pipefd[0], pipe_write);
 
 		wait_ret = waitpid(pid, &status, 0);
 		DIE(wait_ret < 0, "waitpid");
@@ -461,8 +505,8 @@ int parse_command(command_t *c, int level, command_t *father, int pipe_read,
 
 	case OP_PARALLEL:
 		/* TODO execute the commands simultaneously */
-		do_in_parallel(c->cmd1, c->cmd2, level + 1, c, pipe_read, pipe_write);
-		break;
+		ret = do_in_parallel(c->cmd1, c->cmd2, level + 1, c, pipe_read, pipe_write);
+		return ret;
 
 	case OP_CONDITIONAL_NZERO:
 		/* TODO execute the second command only if the first one
@@ -485,6 +529,7 @@ int parse_command(command_t *c, int level, command_t *father, int pipe_read,
 	case OP_PIPE:
 		/* TODO redirect the output of the first command to the
 		 * input of the second */
+		ret = do_on_pipe(c->cmd1, c->cmd2, level + 1, c, pipe_read, pipe_write);
 		break;
 
 	default:
