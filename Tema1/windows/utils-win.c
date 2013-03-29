@@ -31,6 +31,7 @@ static LPTSTR get_argv(simple_command_t *command);
 static BOOL redirect_std_handles(STARTUPINFO *psi, HANDLE hFileIn,
 								 HANDLE hFileOut, HANDLE hFileErr,
 								 simple_command_t *s, BOOL internal);
+DWORD WINAPI thread_run( LPVOID params );
 
 /**
  * Debug method, used by DIE macro.
@@ -396,7 +397,8 @@ static int assign_env_var(const char *var, const char *val) {
  * Parse and execute a simple command, by either creating a new processing or
  * internally process it.
  */
-static int parse_simple(simple_command_t *s, int level, command_t *father, HANDLE *h)
+static int parse_simple(simple_command_t *s, int level, command_t *father,
+						HANDLE *hPipeRead, HANDLE *hPipeWrite)
 {
 	LPTSTR argv = NULL;
 	LPTSTR verb = NULL;
@@ -456,19 +458,74 @@ clear:
 }
 
 /**
+ * Create args
+ */
+static Args *create_args(command_t *cmd, int level, command_t *father, HANDLE *hPipeRead,
+						 HANDLE *hPipeWrite)
+{
+	Args *args = NULL;
+
+	args = calloc(1, sizeof(Args));
+	DIE(args == NULL, "calloc");
+
+	args->cmd = cmd;
+	args->level = level + 1;
+	args->father = father;
+	args->hPipeRead = hPipeRead;
+	args->hPipeWrite = hPipeWrite;
+	return args;
+}
+
+/**
  * Process two commands in parallel, by creating two children.
  */
-static BOOL do_in_parallel(command_t *cmd1, command_t *cmd2, int level, command_t *father)
+static int do_in_parallel(command_t *cmd1, command_t *cmd2, int level, command_t *father,
+						  HANDLE *hPipeRead, HANDLE *hPipeWrite)
 {
+	HANDLE thread;
+	DWORD thread_id, dwRes;
+	Args *args = NULL;
+	BOOL bRes;
+	int ret_val = 0;
 	/* TODO execute cmd1 and cmd2 simultaneously */
+	assert(cmd1 != NULL && cmd1->up == father);
+	assert(cmd2 != NULL && cmd2->up == father);
 
-	return TRUE; /* TODO replace with actual exit status */
+	/* Create thread for child command to simulate fork */
+	args = create_args(cmd1, level + 1, father, hPipeRead, hPipeWrite);
+
+	thread = CreateThread( 
+			NULL,					/* default security attributes */
+			0,						/* use default stack size */
+			thread_run,				/* thread function name */
+			args,					/* argument to thread function */
+			0,						/* use default creation flags */
+			&thread_id);			/* returns the thread identifier */
+
+	DIE(thread == NULL, "CreateThread");
+
+	ret_val = parse_command(cmd2, level + 1, father, hPipeRead, hPipeWrite);
+
+	/* Wait for child thread */
+	dwRes = WaitForSingleObject(thread, INFINITE);
+	DIE(dwRes == WAIT_FAILED, "WaitForSingleObject");
+
+	/* Get child's result */
+	bRes = GetExitCodeThread(thread, &dwRes);
+	DIE(bRes == FALSE, "GetExitCodeThread");
+
+	DIE(CloseHandle(thread) == FALSE, "CloseHandleThread");
+	free(args);
+
+
+	return ret_val; /* TODO replace with actual exit status */
 }
 
 /**
  * Run commands by creating an annonymous pipe (cmd1 | cmd2)
  */
-static int do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *father)
+static int do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *father,
+					  HANDLE *hPipeRead, HANDLE *hPipeWrite)
 {
 	/* TODO redirect the output of cmd1 to the input of cmd2 */
 	SECURITY_ATTRIBUTES sa;
@@ -587,9 +644,20 @@ static int do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *fa
 }
 
 /**
+ * Worker function delegated when creating a thread
+ */
+DWORD WINAPI thread_run( LPVOID params )
+{
+	Args *args = (Args *)params;
+	return parse_command(args->cmd, args->level, args->father, args->hPipeRead,
+		args->hPipeWrite);
+}
+
+/**
  * Parse and execute a command.
  */
-int parse_command(command_t *c, int level, command_t *father, void *h)
+int parse_command(command_t *c, int level, command_t *father, HANDLE *hPipeRead,
+					HANDLE *hPipeWrite)
 {
 	int ret;
 
@@ -602,35 +670,37 @@ int parse_command(command_t *c, int level, command_t *father, void *h)
 		assert(c->cmd1 == NULL);
 		assert(c->cmd2 == NULL);
 
-		return parse_simple(c->scmd, level + 1, c, (HANDLE*)h);
+		return parse_simple(c->scmd, level + 1, c, hPipeRead, hPipeWrite);
 	}
 
 	switch (c->op) {
 	case OP_SEQUENTIAL:
 		/* TODO execute the commands one after the other */
-		ret = parse_command(c->cmd1, level + 1, c, h);
-		ret = parse_command(c->cmd2, level + 1, c, h);
+		ret = parse_command(c->cmd1, level + 1, c, hPipeRead, hPipeWrite);
+		ret = parse_command(c->cmd2, level + 1, c, hPipeRead, hPipeWrite);
 		return ret;
 
 	case OP_PARALLEL:
 		/* TODO execute the commands simultaneously */
-		break;
+		ret = do_in_parallel(c->cmd1, c->cmd2, level + 1, c, hPipeRead,
+			hPipeWrite);
+		return ret;
 
 	case OP_CONDITIONAL_NZERO:
 		/* TODO execute the second command only if the first one
 		 * returns non zero */
-		ret = parse_command(c->cmd1, level + 1, c, h);
+		ret = parse_command(c->cmd1, level + 1, c, hPipeRead, hPipeWrite);
 		if (ret != 0) {
-			ret = parse_command(c->cmd2, level + 1, c, h);
+			ret = parse_command(c->cmd2, level + 1, c, hPipeRead, hPipeWrite);
 		}
 		return ret;
 
 	case OP_CONDITIONAL_ZERO:
 		/* TODO execute the second command only if the first one
 		 * returns zero */
-		ret = parse_command(c->cmd1, level + 1, c, h);
+		ret = parse_command(c->cmd1, level + 1, c, hPipeRead, hPipeWrite);
 		if (ret == 0) {
-			ret = parse_command(c->cmd2, level + 1, c, h);
+			ret = parse_command(c->cmd2, level + 1, c, hPipeRead, hPipeWrite);
 		}
 		return ret;
 

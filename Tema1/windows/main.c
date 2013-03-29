@@ -37,7 +37,7 @@ static void start_shell()
 		parse_line(line, &root);
 
 		if (root != NULL) {
-			ret = parse_command(root, 0, NULL, NULL);
+			ret = parse_command(root, 0, NULL, NULL, NULL);
 		}
 
 		free_parse_memory();

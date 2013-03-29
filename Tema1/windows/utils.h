@@ -8,6 +8,7 @@
 #define _UTILS_H
 
 #include "parser.h"
+#include <Windows.h>
 
 #define CHUNK_SIZE 100
 #define ERR_ALLOCATION "unable to allocate memory"
@@ -25,16 +26,24 @@
 
 #define DEBUG 1
 
+typedef struct Args_ {
+	command_t *cmd;
+	int level;
+	command_t *father;
+	HANDLE *hPipeRead;
+	HANDLE *hPipeWrite;
+}Args;
+
 /* useful macro for handling error codes */
-#define DIE(assertion, call_description)			\
-       do {							\
-               if (assertion) {					\
-                       fprintf(stderr, "(%s, %s, %d): ",	\
-                       __FILE__, __FUNCTION__, __LINE__);	\
-                       PrintLastError(call_description);	\
-                       exit(EXIT_FAILURE);			\
-               }						\
-       } while(0)
+#define DIE(assertion, call_description)					\
+	do {													\
+		if (assertion) {									\
+			fprintf(stderr, "(%s, %s, %d): ",				\
+					__FILE__, __FUNCTION__, __LINE__);		\
+			PrintLastError(call_description);				\
+			exit(EXIT_FAILURE);								\
+		}													\
+	} while(0)
 
 
 /**
@@ -45,6 +54,6 @@ char *read_line();
 /**
  * Parse and execute a command.
  */
-int parse_command(command_t *, int, command_t *, void *);
+int parse_command(command_t *, int, command_t *, HANDLE *, HANDLE *);
 
 #endif
