@@ -1,6 +1,8 @@
 /**
  * Operating Systems 2013 - Assignment 1
  *
+ * Constantin Serban-Radoi 333CA
+ * March 2013
  */
 /* do not use UNICODE */
 #undef _UNICODE
@@ -28,9 +30,11 @@
 
 static LPTSTR get_word(word_t *s);
 static LPTSTR get_argv(simple_command_t *command);
-static BOOL redirect_std_handles(STARTUPINFO *psi, HANDLE hFileIn,
-								 HANDLE hFileOut, HANDLE hFileErr,
-								 simple_command_t *s, BOOL internal);
+static BOOL redirect_std_handles(STARTUPINFO *psi, HANDLE *hFileIn,
+								 HANDLE *hFileOut, HANDLE *hFileErr,
+								 simple_command_t *s,
+								 LPTSTR in_name, LPTSTR out_name,
+								 LPTSTR err_name, BOOL intern);
 DWORD WINAPI thread_run( LPVOID params );
 
 /**
@@ -57,13 +61,23 @@ static VOID PrintLastError(const PCHAR message)
  */
 static bool shell_cd(word_t *dir, simple_command_t *s)
 {
-	/* TODO execute cd */
+	/* Execute cd */
 	HANDLE hFileIn = NULL, hFileOut = NULL, hFileErr = NULL;
+	LPTSTR in_name = NULL, out_name = NULL, err_name = NULL;
 	
 	LPTSTR directory = NULL;
 	BOOL ret, out_is_err;
 
-	out_is_err = redirect_std_handles(NULL, &hFileIn, &hFileOut, &hFileErr, s, INTERNAL);
+	in_name = get_word(s->in);
+	out_name = get_word(s->out);
+	err_name = get_word(s->err);
+
+	out_is_err = redirect_std_handles(NULL, &hFileIn, &hFileOut, &hFileErr, s,
+		in_name, out_name, err_name, INTERNAL);
+
+	free(in_name);
+	free(out_name);
+	free(err_name);
 
 	directory = get_word(dir);
 
@@ -242,21 +256,22 @@ static void redirect_handle(STARTUPINFO *psi, HANDLE hFile, INT opt)
  */
 static BOOL redirect_std_handles(STARTUPINFO *psi, HANDLE *hFileIn,
 								 HANDLE *hFileOut, HANDLE *hFileErr,
-								 simple_command_t *s, BOOL internal) {
-	LPTSTR in_name = NULL, out_name = NULL, err_name = NULL;
+								 simple_command_t *s,
+								 LPTSTR in_name, LPTSTR out_name,
+								 LPTSTR err_name, BOOL intern) {
 	BOOL out_is_err = FALSE;
 
-	in_name = get_word(s->in);
+	/* Input redirection */
 	if (in_name != NULL) {
 		*hFileIn = my_open_file(in_name, GENERIC_READ, OPEN_EXISTING);
 		DIE(*hFileIn == INVALID_HANDLE_VALUE, "CreateFile");
-		if (!internal)
+		if (!intern)
 			redirect_handle(psi, *hFileIn, STD_INPUT_HANDLE);
 		else
 			SetStdHandle(STD_INPUT_HANDLE, *hFileIn);
 	}
 
-	out_name = get_word(s->out);
+	/* Output redirection */
 	if (out_name != NULL) {
 		if (s->io_flags & IO_OUT_APPEND) {
 			DWORD ret;
@@ -267,13 +282,13 @@ static BOOL redirect_std_handles(STARTUPINFO *psi, HANDLE *hFileIn,
 		else
 			*hFileOut = my_open_file(out_name, GENERIC_WRITE, CREATE_ALWAYS);
 		DIE(*hFileOut == INVALID_HANDLE_VALUE, "CreateFile");
-		if (!internal)
+		if (!intern)
 			redirect_handle(psi, *hFileOut, STD_OUTPUT_HANDLE);
 		else
 			SetStdHandle(STD_OUTPUT_HANDLE, *hFileOut);
 	}
 
-	err_name = get_word(s->err);
+	/* Error redirection */
 	if (err_name != NULL) {
 		if (out_name != NULL && lstrcmp(err_name, out_name) == 0) {
 			*hFileErr = *hFileOut;
@@ -290,30 +305,29 @@ static BOOL redirect_std_handles(STARTUPINFO *psi, HANDLE *hFileIn,
 				*hFileErr = my_open_file(err_name, GENERIC_WRITE, CREATE_ALWAYS);
 		}
 		DIE(*hFileErr == INVALID_HANDLE_VALUE, "CreateFile");
-		if (!internal)
+		if (!intern)
 			redirect_handle(psi, *hFileErr, STD_ERROR_HANDLE);
 		else
 			SetStdHandle(STD_ERROR_HANDLE, *hFileErr);
 	}
 
-	free(in_name);
-	free(out_name);
-	free(err_name);
 	return out_is_err;
 }
 
 /*
  * Executes a simple command
  */
-static int run_simple_command(LPTSTR command, simple_command_t *s)
+static int run_simple_command(LPTSTR command, simple_command_t *s, HANDLE *hPipeRead,
+							  HANDLE *hPipeWrite)
 {
 	STARTUPINFO si;
 	PROCESS_INFORMATION pi;
-	DWORD dwRes;
+	DWORD dwRes = 0;
 	BOOL bRes;
 	HANDLE hFileIn = NULL, hFileOut = NULL, hFileErr = NULL;
 	BOOL out_is_err = FALSE;
 	LPTSTR verb = NULL;
+	LPTSTR in_name = NULL, out_name = NULL, err_name = NULL;
 
 	ZeroMemory(&si, sizeof(si));
 	si.cb = sizeof(si);
@@ -323,7 +337,30 @@ static int run_simple_command(LPTSTR command, simple_command_t *s)
 	si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
 	si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
 
-	out_is_err = redirect_std_handles(&si, &hFileIn, &hFileOut, &hFileErr, s, EXTERNAL);
+	in_name = get_word(s->in);
+	out_name = get_word(s->out);
+	err_name = get_word(s->err);
+
+	/* Redirect pipes */
+	if (hPipeRead != NULL && *hPipeRead != INVALID_HANDLE_VALUE) {
+		redirect_handle(&si, *hPipeRead, STD_INPUT_HANDLE);
+		free(in_name);
+		in_name = NULL;
+	}
+
+	if (hPipeWrite != NULL && *hPipeWrite != INVALID_HANDLE_VALUE) {
+		redirect_handle(&si, *hPipeWrite, STD_OUTPUT_HANDLE);
+		free(out_name);
+		out_name = NULL;
+	}
+
+	/* Redirect other handles */
+	out_is_err = redirect_std_handles(&si, &hFileIn, &hFileOut, &hFileErr, s,
+		in_name, out_name, err_name, EXTERNAL);
+
+	free(in_name);
+	free(out_name);
+	free(err_name);
 	
 	bRes = CreateProcess(
 			NULL,
@@ -336,27 +373,29 @@ static int run_simple_command(LPTSTR command, simple_command_t *s)
 			NULL,
 			&si,
 			&pi);
-	/*DIE(!bRes, "Create Process");*/
+
 	if (!bRes) {
 		verb = get_word(s->verb);
 		fprintf(stderr, "Execution failed for '%s'\n", verb);
-		fflush(stderr);
+		fflush(stdout);
 		fflush(stderr);
 		free(verb);
 		return CREATE_PROCESS_FAILED;
 	}
 
-	dwRes = WaitForSingleObject(pi.hProcess, INFINITE);
-	DIE(dwRes == WAIT_FAILED, "WaitForSingleObject");
+	/* Wait process if not created by pipe */
+	if (!(hPipeWrite != NULL && *hPipeWrite != INVALID_HANDLE_VALUE) &&
+		!(hPipeRead != NULL && *hPipeRead != INVALID_HANDLE_VALUE)) {
+		dwRes = WaitForSingleObject(pi.hProcess, INFINITE);
+		DIE(dwRes == WAIT_FAILED, "WaitForSingleObject");
 
-	bRes = GetExitCodeProcess(pi.hProcess, &dwRes);
-	DIE(bRes == FALSE, "GetExitCodeProcess");
+		bRes = GetExitCodeProcess(pi.hProcess, &dwRes);
+		DIE(bRes == FALSE, "GetExitCodeProcess");
 
-	close_process(&pi);
-	/*
-#ifdef DEBUG
-	fprintf(stderr, "hFileOut==NULL {%s}; hFileOut==INVALID {%s}", hFileOut == NULL?"true":"false", hFileOut == INVALID_HANDLE_VALUE?"true":"false");
-#endif*/
+		close_process(&pi);
+	}
+
+	/* Close redirected handles */
 	if (hFileIn != NULL && hFileIn != INVALID_HANDLE_VALUE) {
 		DIE(CloseHandle(hFileIn) == FALSE, "CloseHandleIn");
 		hFileIn = INVALID_HANDLE_VALUE;
@@ -369,6 +408,7 @@ static int run_simple_command(LPTSTR command, simple_command_t *s)
 		DIE(CloseHandle(hFileErr) == FALSE, "CloseHandleErr");
 		hFileErr = INVALID_HANDLE_VALUE;
 	}
+	
 
 	return dwRes;
 }
@@ -378,11 +418,6 @@ static int run_simple_command(LPTSTR command, simple_command_t *s)
  */
 static int assign_env_var(const char *var, const char *val) {
 	BOOL ret_code;
-	/*
-#ifdef DEBUG
-	fprintf(stderr, "var {%s} = val{%s}\n", var, val);
-	fflush(stderr);
-#endif*/
 	
 	ret_code = SetEnvironmentVariable(var, val);
 	DIE(ret_code == 0, "SetEnvironmentVariable");
@@ -403,13 +438,13 @@ static int parse_simple(simple_command_t *s, int level, command_t *father,
 	LPTSTR argv = NULL;
 	LPTSTR verb = NULL;
 	int ret = 0;
-	/* TODO sanity checks */
+	/* Sanity checks */
 	assert(s != NULL);
 	assert(s->up == father);
 
 	verb = get_word(s->verb);
 
-	/* TODO if builtin command, execute the command */
+	/* If builtin command, execute the command */
 	if (strcmp((char *)verb, "exit") == 0 || strcmp((char *)verb, "quit") == 0) {
 		ret = shell_exit();
 		goto clear;
@@ -419,7 +454,7 @@ static int parse_simple(simple_command_t *s, int level, command_t *father,
 		goto clear;
 	}
 
-	/* TODO if variable assignment, execute the assignment and return
+	/* If variable assignment, execute the assignment and return
 	 * the exit status */
 	if (s->verb->next_part != NULL) {
 		CHAR second[MAX_SIZE_ENVIRONMENT_VARIABLE];
@@ -441,24 +476,19 @@ static int parse_simple(simple_command_t *s, int level, command_t *father,
 	}
 
 	argv = get_argv(s);
-	/* TODO if external command:
-	 *  1. set handles
-	 *  2. redirect standard input / output / error
-		 *  3. run command
-	 *  4. get exit code
-	 */
-	ret = run_simple_command(argv, s);
+	/* Execute simple command */
+	ret = run_simple_command(argv, s, hPipeRead, hPipeWrite);
 	free(argv);
 
 
 clear:
 	free(verb);
 
-	return ret; /* TODO replace with actual exit status */
+	return ret;
 }
 
 /**
- * Create args
+ * Create args to be passed in thread
  */
 static Args *create_args(command_t *cmd, int level, command_t *father, HANDLE *hPipeRead,
 						 HANDLE *hPipeWrite)
@@ -487,7 +517,7 @@ static int do_in_parallel(command_t *cmd1, command_t *cmd2, int level, command_t
 	Args *args = NULL;
 	BOOL bRes;
 	int ret_val = 0;
-	/* TODO execute cmd1 and cmd2 simultaneously */
+	/* Sanity checks */
 	assert(cmd1 != NULL && cmd1->up == father);
 	assert(cmd2 != NULL && cmd2->up == father);
 
@@ -517,136 +547,47 @@ static int do_in_parallel(command_t *cmd1, command_t *cmd2, int level, command_t
 	DIE(CloseHandle(thread) == FALSE, "CloseHandleThread");
 	free(args);
 
-
-	return ret_val; /* TODO replace with actual exit status */
+	return ret_val;
 }
 
-/**
- * Run commands by creating an annonymous pipe (cmd1 | cmd2)
- */
-static int do_on_pipe(command_t *cmd1, command_t *cmd2, int level, command_t *father,
-					  HANDLE *hPipeRead, HANDLE *hPipeWrite)
+static int pipe_recursive(command_t *cmd, int level,
+						  HANDLE *hPipeRead, HANDLE *hPipeWrite)
 {
-	/* TODO redirect the output of cmd1 to the input of cmd2 */
+	BOOL bRes;
+	int ret_val = 0;
+
 	SECURITY_ATTRIBUTES sa;
 	HANDLE hRead, hWrite;
-	BOOL bRes;
-	STARTUPINFO si1, si2;
-	PROCESS_INFORMATION pi1, pi2;
-	DWORD dwRes;
-	BOOL out_is_err1, out_is_err2;
 
-	HANDLE hFileIn1 = NULL, hFileOut1 = NULL, hFileErr1 = NULL;
-	HANDLE hFileIn2 = NULL, hFileOut2 = NULL, hFileErr2 = NULL;
-
-	/* Init security attributes structure */
+		/* Init security attributes structure */
 	ZeroMemory(&sa, sizeof(sa));
 	sa.bInheritHandle = TRUE;
-
-	/* Init processes */
-	ZeroMemory(&pi1, sizeof(pi1));
-	ZeroMemory(&pi2, sizeof(pi2));
 
 	/* Create pipe */
 	bRes = CreatePipe(&hRead, &hWrite, &sa, 0);
 	DIE(bRes == FALSE, "CreatePipe");
 
-	/* Redirect first process output */
-	redirect_handle(&si1, hWrite, STD_OUTPUT_HANDLE);
-
-	/* Execute the first process */
-	if (cmd1->op == OP_NONE) {
-		LPTSTR argv;
-		simple_command_t *s1 = cmd1->scmd;
-
-		argv = get_argv(s1);
-
-		/*
-		si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-		si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
-		si.hStdError = GetStdHandle(STD_ERROR_HANDLE);*/
-
-		out_is_err1 = redirect_std_handles(&si1, &hFileIn1, &hFileOut1, &hFileErr1, s1, EXTERNAL);
-
-		bRes = CreateProcess(
-			NULL,
-			argv,
-			NULL,
-			NULL,
-			TRUE,
-			0,
-			NULL,
-			NULL,
-			&si1,
-			&pi1);
-		DIE(bRes == FALSE, "Create Process1");
-
-		free(argv);
+	/* Base case. We have a simple command */
+	if (cmd->op == OP_NONE) {
+		ret_val = parse_simple(cmd->scmd, level + 1, cmd, hPipeRead, hPipeWrite);
+		return ret_val;
 	}
-
-
+	/* Go down in the tree and close the */
+	ret_val = pipe_recursive(cmd->cmd1, level + 1, hPipeRead, &hWrite);
 	DIE(CloseHandle(hWrite) == FALSE, "CloseHandleWrite");
+	hWrite = INVALID_HANDLE_VALUE;
 
-	/* Redirect second process input */
-	redirect_handle(&si2, hRead, STD_INPUT_HANDLE);
-
-
+	ret_val = pipe_recursive(cmd->cmd2, level + 1, &hRead, hPipeWrite);
 	DIE(CloseHandle(hRead) == FALSE, "CloseHandleRead");
+	hRead = INVALID_HANDLE_VALUE;
 
-	/*
-		RedirectHandle(&si1, hWrite, STD_OUTPUT_HANDLE);
-
-		bRes = CreateProcess(
-			NULL,
-			command1,
-			NULL,
-			NULL,
-			TRUE,
-			0,
-			NULL,
-			NULL,
-			&si1,
-			&pi1);
-		DIE(bRes == FALSE, "Create Process1");
-
-		CloseHandle(hWrite);
-
-
-		RedirectHandle(&si2, hRead, STD_INPUT_HANDLE);
-
-		bRes = CreateProcess(
-			NULL,
-			command2,
-			NULL,
-			NULL,
-			TRUE,
-			0,
-			NULL,
-			NULL,
-			&si2,
-			&pi2);
-		DIE(bRes == FALSE, "Create Process2");
-
-		CloseHandle(hRead);
-
-		dwRes = WaitForSingleObject(pi1.hProcess, INFINITE);
-		DIE(dwRes == WAIT_FAILED, "WaitForSingleObject");
-
-		CloseProcess(&pi1);
-
-		dwRes = WaitForSingleObject(pi2.hProcess, INFINITE);
-		DIE(dwRes == WAIT_FAILED, "WaitForSingleObject");
-
-		CloseProcess(&pi2);
-	*/
-
-	return 0; /* TODO replace with actual exit status */
+	return ret_val;
 }
 
 /**
  * Worker function delegated when creating a thread
  */
-DWORD WINAPI thread_run( LPVOID params )
+DWORD WINAPI thread_run(LPVOID params)
 {
 	Args *args = (Args *)params;
 	return parse_command(args->cmd, args->level, args->father, args->hPipeRead,
@@ -661,12 +602,12 @@ int parse_command(command_t *c, int level, command_t *father, HANDLE *hPipeRead,
 {
 	int ret;
 
-	/* TODO sanity checks */
+	/* Sanity checks */
 	assert(c != NULL);
 	assert(c->up == father);
 
 	if (c->op == OP_NONE) {
-		/* TODO execute a simple command */
+		/* Execute a simple command */
 		assert(c->cmd1 == NULL);
 		assert(c->cmd2 == NULL);
 
@@ -675,19 +616,19 @@ int parse_command(command_t *c, int level, command_t *father, HANDLE *hPipeRead,
 
 	switch (c->op) {
 	case OP_SEQUENTIAL:
-		/* TODO execute the commands one after the other */
+		/* Execute the commands one after the other */
 		ret = parse_command(c->cmd1, level + 1, c, hPipeRead, hPipeWrite);
 		ret = parse_command(c->cmd2, level + 1, c, hPipeRead, hPipeWrite);
 		return ret;
 
 	case OP_PARALLEL:
-		/* TODO execute the commands simultaneously */
+		/* Execute the commands simultaneously */
 		ret = do_in_parallel(c->cmd1, c->cmd2, level + 1, c, hPipeRead,
 			hPipeWrite);
 		return ret;
 
 	case OP_CONDITIONAL_NZERO:
-		/* TODO execute the second command only if the first one
+		/* Execute the second command only if the first one
 		 * returns non zero */
 		ret = parse_command(c->cmd1, level + 1, c, hPipeRead, hPipeWrite);
 		if (ret != 0) {
@@ -696,7 +637,7 @@ int parse_command(command_t *c, int level, command_t *father, HANDLE *hPipeRead,
 		return ret;
 
 	case OP_CONDITIONAL_ZERO:
-		/* TODO execute the second command only if the first one
+		/* Execute the second command only if the first one
 		 * returns zero */
 		ret = parse_command(c->cmd1, level + 1, c, hPipeRead, hPipeWrite);
 		if (ret == 0) {
@@ -705,15 +646,16 @@ int parse_command(command_t *c, int level, command_t *father, HANDLE *hPipeRead,
 		return ret;
 
 	case OP_PIPE:
-		/* TODO redirect the output of the first command to the
+		/* Redirect the output of the first command to the
 		 * input of the second */
-		break;
+		ret = pipe_recursive(c, level, hPipeRead, hPipeWrite);
+		return ret;
 
 	default:
 		return SHELL_EXIT;
 	}
 
-	return 0; /* TODO replace with actual exit code of command */
+	return 0;
 }
 
 /**

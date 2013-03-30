@@ -26,9 +26,10 @@
 	* README        - Acest fișier
 
 ** Detalii implementare **
-	Pentru rularea comenzilor simple am folosit fork și execvp; Dacă era nevoie
-să fie rulate în paralel sau cu pipe-uri, am folosit doar fork pentru a împărți
-comanda în două: o parte la procesul copil, alta la procesul părinte.
+	Pentru rularea comenzilor simple am folosit CreateProcess. Pentru rularea
+în paralel am folosit CreateThread.
+	Pentru Pipe-uri, creez pipe-ul, parcurg arborele cât timp am pipe, până
+dau de comandă simplă, apoi rulez cele 2 comenzi.
 
 	Alte detalii se regăsesc și în comentariile din cod și nu cred că e necesar
 să le repet aici.

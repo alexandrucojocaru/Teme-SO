@@ -1,6 +1,8 @@
 /**
  * Operating Systems 2013 - Assignment 1
  *
+ * Constantin Serban-Radoi 333CA
+ * March 2013
  */
 
 
@@ -23,8 +25,6 @@
 #define NO_PIPE 0
 #define PIPE_IN 1
 #define PIPE_OUT 2
-
-#define DEBUG 1
 
 typedef struct Args_ {
 	command_t *cmd;
