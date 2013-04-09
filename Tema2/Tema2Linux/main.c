@@ -15,8 +15,6 @@
 
 
 int main(int argc, char *argv[]) {
-
-
 	pid_t *pids;
 	pid_t pid;
 	int i, N;
@@ -43,7 +41,8 @@ int main(int argc, char *argv[]) {
 		}
 		if (pid == 0) {
 			/* Child */
-			execvp(argv[3], &argv[3]);
+			sprintf(argv[1], "%d", i);	/* Replace with rank. must be < 1000 */
+			execvp(argv[3], &argv[1]);
 			break;
 		}
 		if (pid > 0) {
