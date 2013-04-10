@@ -190,9 +190,11 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype,
 
 	msgq_recv(queue, &message);
 
-	status->MPI_SOURCE = message.status.MPI_SOURCE;
-	status->MPI_TAG = message.status.MPI_TAG;
-	status->_size = message.status._size;
+	if (status != MPI_STATUS_IGNORE) {
+		status->MPI_SOURCE = message.status.MPI_SOURCE;
+		status->MPI_TAG = message.status.MPI_TAG;
+		status->_size = message.status._size;
+	}
 	memcpy(buf, message.buf, count * get_size(datatype));
 
 	msgq_detach(queue);
