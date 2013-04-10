@@ -1,6 +1,6 @@
 CC = gcc
 
-CFLAGS = -Wall -g
+CFLAGS = -Wall -g -D_DEBUG
 LDFLAGS = -lsompi -L.
 
 MPI_DEP_OBJS = mpi.o unix_queue.o unix_sem.o unix_shm.o

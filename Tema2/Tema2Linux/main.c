@@ -10,9 +10,9 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include "utils.h"
 #include "mpi.h"
-
+#include "utils.h"
+#include "common.h"
 
 int main(int argc, char *argv[]) {
 	pid_t *pids;
@@ -26,7 +26,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	N = atoi(argv[2]);
-	dprintf(STDERR_FILENO, "N = %d\n", N);
+	dprintf("N = %d\n", N);
 	if (N < 0) {
 		fprintf(stderr, "Incorrect number of processes. Must be positive\n");
 		return MPI_ERR_OTHER;
@@ -41,12 +41,14 @@ int main(int argc, char *argv[]) {
 		}
 		if (pid == 0) {
 			/* Child */
+			int rc;
+
 			sprintf(argv[1], "%d", i);	/* Replace with rank. must be < 1000 */
-			execvp(argv[3], &argv[1]);
-			break;
+			rc = execvp(argv[3], argv + 1);
+			DIE(rc < 0, "execvp");
 		}
 		if (pid > 0) {
-			dprintf(STDERR_FILENO, "Executing %s\n", argv[3]);
+			dprintf("Executing %s\n", argv[3]);
 			pids[i] = pid;
 		}
 	}

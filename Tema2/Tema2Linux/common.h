@@ -67,7 +67,7 @@ typedef HANDLE shm_t;
 #endif //WIN32
 
 #ifdef _DEBUG
-# define dprintf(...) printf(__VA_ARGS__)
+# define dprintf(...) fprintf(stderr, __VA_ARGS__)
 #else
 # define dprintf(...) do {} while(0)
 #endif
