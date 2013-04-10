@@ -94,4 +94,4 @@ struct _message_t {
 typedef struct _message_t message_t;
 
 
-#endif // _COMMON_H
+#endif

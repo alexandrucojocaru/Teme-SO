@@ -1,4 +1,4 @@
-/*
+/**
  * mpi.c
  *
  *  Created on: Apr 8, 2013
@@ -54,6 +54,7 @@ static size_t get_size(MPI_Datatype datatype) {
 }
 
 int MPI_Init(int *argc, char ***argv) {
+	/* Sanity checks */
 	if (MPI_COMM_WORLD != NOT_INITIALIZED) {
 		return MPI_ERR_OTHER;
 	}
@@ -77,10 +78,12 @@ int MPI_Init(int *argc, char ***argv) {
 }
 
 int MPI_Finalize() {
+	/* Sanity checks */
 	if (MPI_COMM_WORLD == FINALIZED) {
 		return MPI_ERR_OTHER;
 	}
 
+	/* Free resources */
 	free(MPI_COMM_WORLD);
 	MPI_COMM_WORLD = FINALIZED;
 
@@ -131,6 +134,7 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest,
 	message_t message;
 	char name[MAX_IPC_NAME];
 
+	/* Sanity checks */
 	if (MPI_COMM_WORLD == NOT_INITIALIZED || MPI_COMM_WORLD == FINALIZED) {
 		return MPI_ERR_OTHER;
 	}
@@ -144,6 +148,7 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest,
 		return MPI_ERR_TYPE;
 	}
 
+	/* Open corresponding queue and send message */
 	snprintf(name, MAX_IPC_NAME, "%s%d", BASE_QUEUE_NAME, dest);
 	queue = msgq_get(name);
 	message.status.MPI_SOURCE = MPI_COMM_WORLD->rank;
@@ -164,6 +169,7 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype,
 	message_t message;
 	char name[MAX_IPC_NAME];
 
+	/* Sanity checks */
 	if (MPI_COMM_WORLD == NOT_INITIALIZED || MPI_COMM_WORLD == FINALIZED) {
 		dprintf("Recv: MPI_COMM_WORLD: %p\n", MPI_COMM_WORLD);
 		return MPI_ERR_OTHER;
@@ -185,11 +191,13 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype,
 		return MPI_ERR_TYPE;
 	}
 
+	/* Open corresponding queue and receive message */
 	snprintf(name, MAX_IPC_NAME, "%s%d", BASE_QUEUE_NAME, MPI_COMM_WORLD->rank);
 	queue = msgq_get(name);
 
 	msgq_recv(queue, &message);
 
+	/* Get status information if not explicitly ignored */
 	if (status != MPI_STATUS_IGNORE) {
 		status->MPI_SOURCE = message.status.MPI_SOURCE;
 		status->MPI_TAG = message.status.MPI_TAG;

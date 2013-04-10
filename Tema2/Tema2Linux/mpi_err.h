@@ -1,3 +1,11 @@
+/**
+ * mpi_err.h
+ *
+ *  Created on: Apr 8, 2013
+ *      Author: Constantin Serban-Radoi 333CA
+ *
+ * 	Tema 2 SO
+ */
 #ifndef MPI_ERR_H_
 #define MPI_ERR_H_
 

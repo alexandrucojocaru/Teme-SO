@@ -1,8 +1,10 @@
 /**
- * SO, 2011
- * Lab #3, Procese
+ * utils.h
  *
- * Useful structures/macros
+ *  Created on: Apr 8, 2013
+ *      Author: Constantin Serban-Radoi 333CA
+ *
+ * 	Tema 2 SO
  */
 
 #ifndef LIN_UTILS_H_

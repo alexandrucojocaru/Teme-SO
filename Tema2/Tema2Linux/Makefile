@@ -1,6 +1,8 @@
+# Makefile for Tema 2 SO
+# Author: Constantin Serban-Radoi 333CA
 CC = gcc
 
-CFLAGS = -Wall -g -D_DEBUG
+CFLAGS = -Wall -g
 LDFLAGS = -lsompi -L.
 
 GENERICS = unix_queue.o unix_sem.o unix_shm.o

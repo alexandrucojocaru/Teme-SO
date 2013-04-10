@@ -1,4 +1,4 @@
-/*
+/**
  * main.c
  *
  *  Created on: Apr 8, 2013
@@ -24,6 +24,7 @@ int main(int argc, char *argv[]) {
 	int rc, status;
 	msgq_t *queues;
 
+	/* Check arguments */
 	if (argc < 4 || strcmp(argv[1], "-np") != 0) {
 		fprintf(stderr, "Usage: ./mpirun -np NR_PROC command\n");
 		return MPI_ERR_OTHER;
@@ -49,6 +50,7 @@ int main(int argc, char *argv[]) {
 		queues[i] = msgq_create(name);
 	}
 
+	/* Create processes */
 	for (i = 0; i < N; ++i) {
 		pid = fork();
 		if (pid < 0) {

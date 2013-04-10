@@ -1,11 +1,12 @@
 /**
-  * SO, 2011
-  * Lab #5
-  *
-  * Task #2, lin
-  *
-  * Unix implementation of queue functions
-  */
+ * main.c
+ *
+ *  Created on: Apr 8, 2013
+ *      Author: Constantin Serban-Radoi 333CA
+ *
+ * Tema 2 SO
+ * Unix implementation of queue functions
+ */
 #include "generic_queue.h"
 #include "utils.h"
 
@@ -88,8 +89,6 @@ void   msgq_send(msgq_t m, message_t *x) {
 	/* TODO 1 */
 	rc = mq_send(m->mq, (const char*)x, sizeof(message_t), 0);
 	DIE(rc < 0, "mq_send");
-
-	//dprintf("sending %c %s \n", x->cmd, x->val);
 }
 
 /**
@@ -100,8 +99,6 @@ void   msgq_recv(msgq_t m, message_t *x) {
 
 	rc = mq_receive(m->mq, (char *)x, sizeof(message_t), NULL);
 	DIE(rc < 0, "mq_recv");
-
-	//dprintf("received %c %s \n", x->cmd, x->val);
 }
 
 
