@@ -11,14 +11,21 @@
 #include "generic_queue.h"
 #include "generic_sem.h"
 #include "generic_shm.h"
+#include "utils.h"
+#include "string.h"
 
 MPI_Comm MPI_COMM_WORLD = NULL;
+
+struct mpi_comm {
+	unsigned int rank;
+	unsigned int size;
+};
 
 /**
  * Checks if data type is valid
  */
 static int is_data_type_valid(MPI_Datatype datatype) {
-	switch (datatype) {
+	switch(datatype) {
 	case MPI_CHAR:
 	case MPI_INT:
 	case MPI_DOUBLE:
@@ -27,6 +34,23 @@ static int is_data_type_valid(MPI_Datatype datatype) {
 		return FALSE;
 	}
 	return FALSE;
+}
+
+/**
+ * Get size of a data type
+ */
+static size_t get_size(MPI_Datatype datatype) {
+	switch(datatype) {
+	case MPI_CHAR:
+		return sizeof(char);
+	case MPI_INT:
+		return sizeof(int);
+	case MPI_DOUBLE:
+		return sizeof(double);
+	default:
+		return -1;
+	}
+	return -1;
 }
 
 int MPI_Init(int *argc, char ***argv) {
@@ -103,6 +127,10 @@ int MPI_Comm_rank(MPI_Comm comm, int *rank) {
 
 int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest,
 			int tag, MPI_Comm comm) {
+	msgq_t queue;
+	message_t message;
+	char name[MAX_IPC_NAME];
+
 	if (MPI_COMM_WORLD == NOT_INITIALIZED || MPI_COMM_WORLD == FINALIZED) {
 		return MPI_ERR_OTHER;
 	}
@@ -116,17 +144,32 @@ int MPI_Send(void *buf, int count, MPI_Datatype datatype, int dest,
 		return MPI_ERR_TYPE;
 	}
 
+	snprintf(name, MAX_IPC_NAME, "%s%d", BASE_QUEUE_NAME, dest);
+	queue = msgq_get(name);
+	message.status.MPI_SOURCE = MPI_COMM_WORLD->rank;
+	message.status.MPI_TAG = tag;
+	message.status._size = count;
+	memcpy(message.buf, buf, count * get_size(datatype));
+
+	msgq_send(queue, &message);
+
+	msgq_detach(queue);
+
 	return MPI_SUCCESS;
 }
 
 int MPI_Recv(void *buf, int count, MPI_Datatype datatype,
 			int source, int tag, MPI_Comm comm, MPI_Status *status) {
+	msgq_t queue;
+	message_t message;
+	char name[MAX_IPC_NAME];
+
 	if (MPI_COMM_WORLD == NOT_INITIALIZED || MPI_COMM_WORLD == FINALIZED) {
-		dprintf("Recv: MPI_COMM_WORLD: %d\n", MPI_COMM_WORLD);
+		dprintf("Recv: MPI_COMM_WORLD: %p\n", MPI_COMM_WORLD);
 		return MPI_ERR_OTHER;
 	}
 	if (comm != MPI_COMM_WORLD) {
-		dprintf("Recv: comm != MPI_COMM_WORLD: %d != %d\n", comm, MPI_COMM_WORLD);
+		dprintf("Recv: comm != MPI_COMM_WORLD: %p != %p\n", comm, MPI_COMM_WORLD);
 		return MPI_ERR_COMM;
 	}
 	if (source != MPI_ANY_SOURCE) {
@@ -142,6 +185,18 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype,
 		return MPI_ERR_TYPE;
 	}
 
+	snprintf(name, MAX_IPC_NAME, "%s%d", BASE_QUEUE_NAME, MPI_COMM_WORLD->rank);
+	queue = msgq_get(name);
+
+	msgq_recv(queue, &message);
+
+	status->MPI_SOURCE = message.status.MPI_SOURCE;
+	status->MPI_TAG = message.status.MPI_TAG;
+	status->_size = message.status._size;
+	memcpy(buf, message.buf, count * get_size(datatype));
+
+	msgq_detach(queue);
+
 	dprintf("Recv should return success here\n");
 
 	return MPI_SUCCESS;
@@ -154,6 +209,8 @@ int MPI_Get_count(MPI_Status *status, MPI_Datatype datatype, int *count) {
 	if (!is_data_type_valid(datatype)) {
 		return MPI_ERR_TYPE;
 	}
+
+	*count = status->_size;
 
 	return MPI_SUCCESS;
 }

@@ -19,14 +19,8 @@
 #error "Unknown platform"
 #endif
 
-struct mpi_comm {
-	unsigned int rank;
-	unsigned int size;
-};
+struct mpi_comm;
 typedef struct mpi_comm *MPI_Comm;
-
-#define NOT_INITIALIZED NULL
-#define FINALIZED ((void *)-1)
 
 extern DECLSPEC struct mpi_comm *mpi_comm_world;
 #define MPI_COMM_WORLD (mpi_comm_world)

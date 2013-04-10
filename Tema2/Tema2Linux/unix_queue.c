@@ -27,7 +27,7 @@ msgq_t msgq_create(const char *name) {
 
 
 	/* TODO 1 - Open queue */
-	q->mq = mq_open(q->name, O_CREAT | O_RDONLY, 0644, &attr);
+	q->mq = mq_open(q->name, O_CREAT | O_RDWR, 0644, &attr);
 	DIE (q->mq == (mqd_t)-1, "mq_open");
 
 	return q;
@@ -43,7 +43,7 @@ msgq_t msgq_get(const char* name) {
 	snprintf(q->name, MAX_IPC_NAME, "/%s", name);
 
 	/* TODO 1 - Open queue */
-	q->mq = mq_open(q->name, O_WRONLY);
+	q->mq = mq_open(q->name, O_RDWR);
 	DIE (q->mq == (mqd_t)-1, "mq_open");
 
 	return q;
@@ -89,7 +89,7 @@ void   msgq_send(msgq_t m, message_t *x) {
 	rc = mq_send(m->mq, (const char*)x, sizeof(message_t), 0);
 	DIE(rc < 0, "mq_send");
 
-	dprintf("sending %c %s \n", x->cmd, x->val);
+	//dprintf("sending %c %s \n", x->cmd, x->val);
 }
 
 /**
@@ -101,7 +101,7 @@ void   msgq_recv(msgq_t m, message_t *x) {
 	rc = mq_receive(m->mq, (char *)x, sizeof(message_t), NULL);
 	DIE(rc < 0, "mq_recv");
 
-	dprintf("received %c %s \n", x->cmd, x->val);
+	//dprintf("received %c %s \n", x->cmd, x->val);
 }
 
 

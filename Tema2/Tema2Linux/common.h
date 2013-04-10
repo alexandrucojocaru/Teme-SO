@@ -29,6 +29,7 @@
 #include <sys/mman.h>
 #include <semaphore.h>
 #include <mqueue.h>
+#include "mpi.h"
 
 struct _msgq_t {
 	mqd_t	mq;
@@ -72,8 +73,6 @@ typedef HANDLE shm_t;
 # define dprintf(...) do {} while(0)
 #endif
 
-#define MAX_WORD_SIZE (1 << 4)
-
 
 #define BASE_QUEUE_NAME 	"my_queue"
 
@@ -81,13 +80,15 @@ typedef HANDLE shm_t;
 
 #define BASE_SHM_NAME 		"my_shm"
 
+#define BUF_SIZE (1 << 12)
+
 /**
  * the command message to be sent via the queue, with
  * variable length payload of text
  */
 struct _message_t {
-	char cmd;
-	char val[MAX_WORD_SIZE];
+	MPI_Status status;
+	char buf[BUF_SIZE];
 };
 
 typedef struct _message_t message_t;

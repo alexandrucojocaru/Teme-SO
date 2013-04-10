@@ -26,3 +26,6 @@
 
 #define TRUE 1
 #define FALSE 0
+
+#define NOT_INITIALIZED NULL
+#define FINALIZED ((void *)-1)
