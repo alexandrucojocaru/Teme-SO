@@ -1,0 +1,32 @@
+*** Tema2 SO - MPI ***
+*** Șerban-Radoi Constantin 333CA ***
+*** Aprilie 2013 ***
+
+** Descriere **
+	Tema constă în implementarea unei versiuni limitate a MPI.
+
+** Mod compilare **
+	nmake /f Makefile
+
+** Pentru a rula **
+	Trebuie să existe fișierul sompi.dll sompi.lib în directorul curent,
+apoi se rulează:
+	mpirun.exe -np X command
+
+** Listă fișiere **
+	* main.c		- Fișier ce conține functia main
+	* utils.h		- Fișier ce conține antete și macrouri utile 
+	* common.h		- Fișier ce conține diverse antete și macro-uri comune
+	* mpi.h			- Fișier ce conține antetele funcțiilor mpi
+	* mpi_err.h		- Fișier ce conține macro-uri de eroare
+	* mpi.c			- Fișier ce conține implementarea bibliotecii dinamice mpi
+	* generic_*.h	- Fișiere header pentru cozi, semafoare, memorie partajată
+	* win_*.c		- Fișiere de implementare cozi, semafoare, memorie partajată
+	* Makefile      - Fișier makefile
+	* README        - Acest fișier
+
+** Detalii implementare **
+	Pentru pornirea proceselor m-am folosit de apelul de sistem CreateProcess.
+Mesajele le-am transmis cu ajutorul cozilor blocante din Windows, anume MailSlots.
+	Parametrii comenzii sunt conservați în urma apelului mpirun.
+	Alte detalii din implementare se pot regăsi în comentarii
