@@ -11,6 +11,7 @@
 *.so
 *.so.*
 *.dylib
+*.exp
 
 # Executables
 *.exe
@@ -32,3 +33,19 @@
 
 # Eclipse metadata folder
 .metadata/*
+
+# Temp files
+*~
+
+/Tema2/tema2-checker-lin/_test/bin/test_before_after
+/Tema2/tema2-checker-lin/_test/bin/test_double_finalize
+/Tema2/tema2-checker-lin/_test/bin/test_double_init
+/Tema2/tema2-checker-lin/_test/bin/test_matrix_multiply
+/Tema2/tema2-checker-lin/_test/bin/test_mpirun
+/Tema2/tema2-checker-lin/_test/bin/test_ring
+/Tema2/tema2-checker-lin/_test/bin/test_send_recv
+/Tema2/tema2-checker-lin/_test/bin/test_send_recv_array
+/Tema2/tema2-checker-lin/_test/bin/test_simple
+/Tema2/tema2-checker-lin/mpirun
+/Tema2/tema2-checker-lin/test.log
+/Tema2/tema2-checker-win/test.log
