@@ -1,0 +1,12 @@
+all: build-pre build-post run
+
+build-pre:
+
+build-post:
+	cd _test && nmake tests && cd ..
+
+run:
+	@bash ./run_all.sh
+
+clean:
+	cd _test && nmake clean && cd ..
