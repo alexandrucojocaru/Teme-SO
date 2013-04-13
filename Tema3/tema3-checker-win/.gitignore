@@ -4,3 +4,5 @@
 /ram*
 /swap*
 run_test.exe
+/cmd_build.all.bat
+/cmd_build.clean.bat

@@ -8,10 +8,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-//#define _WIN32_WINNT	0x500	/* vectored exception handler */
-
-//#include <windows.h>
-
 #include "common.h"
 #include "debug.h"
 #include "util.h"
