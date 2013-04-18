@@ -52,7 +52,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;LIBVMSIM_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <CompileAs>CompileAsC</CompileAs>
+      <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -81,10 +81,15 @@
     <ClInclude Include="debug.h" />
     <ClInclude Include="util.h" />
     <ClInclude Include="vmsim.h" />
+    <ClInclude Include="vmsim_mem.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="common_win.c" />
-    <ClCompile Include="vmsim.c" />
+    <ClCompile Include="common_win.cpp" />
+    <ClCompile Include="vmsim.cpp" />
+    <ClCompile Include="vmsim_mem.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Makefile" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

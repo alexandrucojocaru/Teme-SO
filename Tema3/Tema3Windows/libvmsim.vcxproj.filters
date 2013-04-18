@@ -27,13 +27,22 @@
     <ClInclude Include="vmsim.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="vmsim_mem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="common_win.c">
+    <ClCompile Include="common_win.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vmsim.c">
+    <ClCompile Include="vmsim.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="vmsim_mem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Makefile" />
   </ItemGroup>
 </Project>
