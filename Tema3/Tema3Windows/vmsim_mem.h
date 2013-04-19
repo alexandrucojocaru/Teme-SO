@@ -40,7 +40,7 @@ typedef struct frame_ {
 typedef struct mem_tables_ {
 	vector<page_table_entry_t> virtual_pages;
 	vector<frame_t> ram_frames;
-
+	vm_map_t *map;
 }mem_tables_t;
 
 #define RAM_PREFIX "ram"

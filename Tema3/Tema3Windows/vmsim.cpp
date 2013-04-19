@@ -10,6 +10,7 @@
 #include "vmsim.h"
 #include "vmsim_mem.h"
 #include "util.h"
+#include "debug.h"
 
 #include <map>
 
@@ -55,7 +56,9 @@ w_boolean_t vm_alloc(w_size_t num_pages, w_size_t num_frames, vm_map_t *map) {
 	}
 
 	mem_tables_t mem_tables;
+	/* Create entries in arrays for ram and swap */
 	mem_tables.virtual_pages.resize(num_pages);
+	mem_tables.ram_frames.resize(num_frames);
 	
 	page_table_entry_t page_entry;
 	w_handle_t ram_handle, swap_handle;
@@ -70,10 +73,54 @@ w_boolean_t vm_alloc(w_size_t num_pages, w_size_t num_frames, vm_map_t *map) {
 	page_entry.start = NULL;
 	page_entry.state = STATE_NOT_ALLOC;
 
+	{
+		w_ptr_t base_address;
+		w_boolean_t rc;
+		w_size_t size;
+		w_size_t i;
+
+		size = num_pages * p_sz;
+
+		/* initial allocation (NUM_PAGES size) */
+		base_address = VirtualAlloc(
+				NULL,
+				size,
+				MEM_RESERVE,
+				PAGE_READWRITE);
+		DIE(base_address == NULL, "VirtualAlloc");
+
+		dprintf("VirtualAlloc (reserve) returned %p\n", base_address);
+
+		/* free allocation - leave room for page granular allocations */
+		rc = VirtualFree(base_address, 0, MEM_RELEASE);
+		DIE(rc == FALSE, "VirtualFree");
+
+		/* do page granular allocations at given addresses */
+		for (i = 0; i < num_pages; i++) {
+			page_entry.start = VirtualAlloc(
+					(char *) base_address + i * p_sz,
+					p_sz,
+					MEM_RESERVE,
+					PAGE_READWRITE);
+			DIE(page_entry.start == NULL, "Virtual Alloc");
+			dprintf("granular VirtualAlloc (reserve) returned %p\n", page_entry.start);
+
+			memcpy(&mem_tables.virtual_pages[i], &page_entry, sizeof(page_table_entry_t));
+		}
+
+		///* do page granular frees */
+		//for (i = 0; i < NUM_PAGES; i++) {
+		//	rc = VirtualFree(addressArray[i], 0, MEM_RELEASE);
+		//	DIE(rc == FALSE, "VirtualFree");
+		//}
+		map->start = base_address;
+	}
 
 	map->ram_handle = ram_handle;
 	map->swap_handle = swap_handle;
-	map->start = NULL;
+
+	mem_tables.map = map;
+	alloc_states[map->start] = mem_tables;
 
 	return TRUE;
 }
@@ -87,8 +134,34 @@ w_boolean_t vm_alloc(w_size_t num_pages, w_size_t num_frames, vm_map_t *map) {
  */
 
 w_boolean_t vm_free(w_ptr_t start) {
-	if (start == NULL)
+	if (start == NULL) {
+		dlog(LOG_DEBUG, "vm_free was called with NULL start pointer\n");
 		return FALSE;
+	}
+
+	if (alloc_states.find(start) == alloc_states.end()) {
+		dlog(LOG_DEBUG, "vm_free was called with bad start address\n");
+		return FALSE;
+	}
+
+	w_boolean_t rc;
+	mem_tables_t table;
+	unsigned int i;
+
+	table = alloc_states[start];
+
+	for (i = 0; i < table.virtual_pages.size(); ++i) {
+		rc = VirtualFree(table.virtual_pages[i].start,
+			0,
+			MEM_RELEASE);
+		DIE(rc == FALSE, "VirtualFree");
+	}
+
+	w_close_file(table.map->ram_handle);
+	w_close_file(table.map->swap_handle);
+
+	alloc_states.erase(alloc_states.find(start));
+
 	return TRUE;
 }
 
