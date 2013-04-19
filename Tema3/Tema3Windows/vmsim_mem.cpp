@@ -8,26 +8,33 @@
 #include "util.h"
 #include "debug.h"
 
-LPVOID w_map(HANDLE fd, DWORD size) {
-	HANDLE hFileMap;
-	LPVOID p;
+/*
+ * Map a base address to a file
+ */
+w_ptr_t w_map(HANDLE fd, DWORD size, w_ptr_t address) {
+	HANDLE file_map;
+	w_ptr_t p;
 
-	hFileMap = CreateFileMapping(
+	file_map = CreateFileMapping(
 			fd,
 			NULL,
 			PAGE_READWRITE,
 			0,
 			size,
 			NULL);
-	DIE(hFileMap == NULL, "CreateFileMapping");
+	DIE(file_map == NULL, "CreateFileMapping");
 
-	p = MapViewOfFile(
-			hFileMap,
-			FILE_MAP_ALL_ACCESS,
-			0,
-			0,
-			0);
-	DIE(p == NULL, "MapViewOfFile");
+	/* use MapViewOfFileEx to map file to that exact location */
+	p = MapViewOfFileEx(
+		file_map,
+		FILE_MAP_ALL_ACCESS,
+		0,
+		0,
+		size,
+		address);
+	DIE(p == NULL, "MapViewOfFileEx");
+
+	dlog(LOG_DEBUG, "MapViewOfFileEx returned %p\n", p);
 
 	return p;
 }
