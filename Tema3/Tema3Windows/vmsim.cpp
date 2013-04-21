@@ -177,6 +177,8 @@ LONG vmsim_exception_handler(PEXCEPTION_POINTERS eptr) {
 	/* Get the address of page witch generated the page fault */
 	addr = (PBYTE)eptr->ExceptionRecord->ExceptionInformation[1];
 
+	dlog(LOG_DEBUG, "Page fault at address %p\n", addr);
+
 	map<w_ptr_t, mem_tables_t>::iterator it;
 	bool found = false;
 
@@ -188,17 +190,37 @@ LONG vmsim_exception_handler(PEXCEPTION_POINTERS eptr) {
 			found = true;
 
 			page_no = (int)(addr - (PBYTE)it->second.map->start) / p_sz;
-			dlog(LOG_DEBUG, "Page fault for page number %d at address %p\n",
+			dlog(LOG_DEBUG, "Page number %d at address %p\n",
 				page_no, addr);
 
-			/* free allocation - leave room for MapViewOfFileEx */
+			
 			PBYTE page_addr = (PBYTE)((UINT32)it->second.map->start + page_no * (int)p_sz);
 			dlog(LOG_DEBUG, "Computed page_addr is %p\n", page_addr);
-			BOOL rc = VirtualFree(page_addr, 0, MEM_RELEASE);
-			DIE(rc == FALSE, "VirtualFree");
+			
+			page_table_entry_t *page = &(it->second.virtual_pages[page_no]);
 
-			//page_table_entry_t *page = &(it->second.virtual_pages[page_no]);
-			w_ptr_t mapped_addr = w_map(it->second.map->ram_handle, p_sz, page_addr);
+			if (page->protection == PROTECTION_NONE) {
+				/* free allocation - leave room for MapViewOfFileEx */
+				BOOL rc = VirtualFree(page_addr, 0, MEM_RELEASE);
+				DIE(rc == FALSE, "VirtualFree");
+			}
+
+			page->protection = (w_prot_t)(((int)page->protection + 1) % 3);
+			if (page->protection == PROTECTION_WRITE) {
+				BOOL rc = w_unmap(page->start);
+			}
+			w_ptr_t mapped_addr = w_map(it->second.map->ram_handle, p_sz, page_addr,
+				page->protection);
+
+			page->state = STATE_IN_RAM;
+			page->prev_state = STATE_NOT_ALLOC;
+			page->start = mapped_addr;
+
+			dlog(LOG_DEBUG, "mapped_addr is %p and protection is %d\n", page->start, page->protection);
+
+			//ZeroMemory(mapped_addr, p_sz);
+
+			//Sleep(1000);
 
 			break;
 		}

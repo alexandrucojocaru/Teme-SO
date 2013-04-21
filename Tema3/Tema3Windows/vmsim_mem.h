@@ -50,8 +50,8 @@ typedef struct mem_tables_ {
 /*
  * Maps a file
  */
-w_ptr_t w_map(HANDLE fd, DWORD size, w_ptr_t address);
-
+w_ptr_t w_map(HANDLE fd, DWORD size, w_ptr_t address, w_prot_t prot);
+w_boolean_t w_unmap(w_ptr_t address);
 
 
 
