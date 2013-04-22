@@ -62,3 +62,20 @@ w_boolean_t w_unmap(w_ptr_t address) {
 	DIE(rc == FALSE, "UnmapViewOfFile");
 	return rc;
 }
+
+void fill_file(w_handle_t handle, w_size_t size, char byte)
+{
+	char buf[BUFSIZ];
+	w_size_t to_write;
+	w_size_t left;
+
+	w_set_file_pointer(handle, 0);
+
+	memset(buf, byte, BUFSIZ);
+	left = size;
+	while (left > 0) {
+		to_write = (BUFSIZ > left ? left : BUFSIZ);
+		w_write_file(handle, buf, to_write);
+		left -= to_write;
+	}
+}

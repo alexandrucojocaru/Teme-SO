@@ -44,7 +44,11 @@ static w_handle_t create_handle(char *prefix, w_size_t num_pages) {
 
 	w_set_file_pointer(handle, p_sz * num_pages);
 	SetEndOfFile(handle);
+
+	zero_file(handle, p_sz * num_pages);
+
 	w_set_file_pointer(handle, 0);
+
 	return handle;
 }
 
@@ -217,10 +221,6 @@ LONG vmsim_exception_handler(PEXCEPTION_POINTERS eptr) {
 			page->start = mapped_addr;
 
 			dlog(LOG_DEBUG, "mapped_addr is %p and protection is %d\n", page->start, page->protection);
-
-			//ZeroMemory(mapped_addr, p_sz);
-
-			//Sleep(1000);
 
 			break;
 		}

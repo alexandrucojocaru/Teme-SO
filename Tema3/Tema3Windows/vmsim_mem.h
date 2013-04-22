@@ -48,11 +48,17 @@ typedef struct mem_tables_ {
 #define SWAP_PREFIX "swa"
 
 /*
- * Maps a file
+ * File mapping/unmapping
  */
 w_ptr_t w_map(HANDLE fd, DWORD size, w_ptr_t address, w_prot_t prot);
 w_boolean_t w_unmap(w_ptr_t address);
 
 
+void fill_file(w_handle_t handle, w_size_t size, char byte);
+
+/*
+ * Fills a file with zeros
+ */
+#define zero_file(handle, size)		fill_file(handle, size, 0)
 
 #endif
