@@ -123,12 +123,19 @@ w_boolean_t vm_alloc(w_size_t num_pages, w_size_t num_frames, vm_map_t *map) {
 		}
 
 		map->start = base_address;
+
+		map->ram_handle = ram_handle;
+		map->swap_handle = swap_handle;
+
+		/* Create file mappings for ram and swap */
+		mem_tables.mapping_handles.ram_map_handle = w_create_file_mapping(
+			map->ram_handle, num_frames);
+		mem_tables.mapping_handles.swap_map_handle = w_create_file_mapping(
+			map->swap_handle, num_pages);
 	}
 
-	map->ram_handle = ram_handle;
-	map->swap_handle = swap_handle;
-
 	mem_tables.map = map;
+	mem_tables.pages_in_ram = 0;
 	alloc_states[map->start] = mem_tables;
 
 	return TRUE;
@@ -165,6 +172,9 @@ w_boolean_t vm_free(w_ptr_t start) {
 			MEM_RELEASE);
 		DIE(rc == FALSE, "VirtualFree");
 	}
+
+	w_close_file_mapping(table.mapping_handles.ram_map_handle);
+	w_close_file_mapping(table.mapping_handles.swap_map_handle);
 
 	w_close_file(table.map->ram_handle);
 	w_close_file(table.map->swap_handle);
@@ -203,22 +213,114 @@ LONG vmsim_exception_handler(PEXCEPTION_POINTERS eptr) {
 			
 			page_table_entry_t *page = &(it->second.virtual_pages[page_no]);
 
-			if (page->protection == PROTECTION_NONE) {
+			/* Page was not previously alocated */
+			if (page->state == STATE_NOT_ALLOC) {
 				/* free allocation - leave room for MapViewOfFileEx */
 				BOOL rc = VirtualFree(page_addr, 0, MEM_RELEASE);
 				DIE(rc == FALSE, "VirtualFree");
 			}
 
-			page->protection = (w_prot_t)(((int)page->protection + 1) % 3);
-			if (page->protection == PROTECTION_WRITE) {
-				BOOL rc = w_unmap(page->start);
+			/* Increase protection if page is in RAM already or not allocated */
+			if (page->state == STATE_IN_RAM || page->state == STATE_NOT_ALLOC) {
+				page->protection = (w_prot_t)(((int)page->protection + 1) % 3);
 			}
-			w_ptr_t mapped_addr = w_map(it->second.map->ram_handle, p_sz, page_addr,
-				page->protection);
 
-			page->state = STATE_IN_RAM;
-			page->prev_state = STATE_NOT_ALLOC;
-			page->start = mapped_addr;
+			/* Page was already allocated and must be unmapped to remap it */
+			if (page->state != STATE_NOT_ALLOC) {
+				BOOL rc = w_unmap(page->start);
+				if (page->protection == PROTECTION_WRITE)
+					page->dirty = TRUE;
+			}
+
+			int num_pages = (int)it->second.virtual_pages.size();
+			int num_frames = (int)it->second.ram_frames.size();
+
+			w_ptr_t mapped_addr;
+
+			/* Allocate in RAM */
+			if (it->second.pages_in_ram < num_frames || page->state == STATE_IN_RAM) {
+				DWORD index = page->frame == NULL ? it->second.pages_in_ram : page->frame->index;
+				dlog(LOG_DEBUG, "Alocating in ram for index %d\n", index);
+				mapped_addr = w_map(it->second.mapping_handles.ram_map_handle,
+					index * p_sz, p_sz, page_addr,
+					page->protection);
+
+				page->prev_state = page->state;
+				page->state = STATE_IN_RAM;
+				page->start = mapped_addr;
+
+				if (page->frame == NULL) {
+					page->frame = (frame_t *) malloc(sizeof(frame_t));
+					page->frame->index = it->second.pages_in_ram++;
+					page->frame->pte = page;
+
+					it->second.ram_frames[page->frame->index] = *page->frame;
+				}
+				dlog(LOG_DEBUG, "Alocated in RAM address %lp\n", mapped_addr);
+			}
+
+			/* Swap out if RAM is full */
+			else if (it->second.pages_in_ram == num_frames && page->state != STATE_IN_RAM) {
+				/* Swap out the first page from ram */
+				frame_t *swapped_frame = &it->second.ram_frames[0];
+
+				dlog(LOG_DEBUG, "Swapping out address %lp\n", swapped_frame->pte->start);
+
+				/* If dirty, or has never been copied to swap, copy to SWAP */
+				if ((!swapped_frame->pte->dirty &&
+						(swapped_frame->pte->prev_state == STATE_NOT_ALLOC ||
+						swapped_frame->pte->prev_state == STATE_IN_RAM)) ||
+						swapped_frame->pte->dirty) {
+
+					dlog(LOG_DEBUG, "Swapping out address which seems to be dirty or never swapped %lp\n", swapped_frame->pte->start);
+					
+					char *buf = (char *)malloc(p_sz * sizeof(char));
+
+					memcpy(buf, swapped_frame->pte->start, p_sz);
+					w_unmap(swapped_frame->pte->start);
+
+					/* Map with prot write to make the swapping out */
+					swapped_frame->pte->start = w_map(it->second.mapping_handles.swap_map_handle,
+						page_no * p_sz,
+						p_sz,
+						swapped_frame->pte->start,
+						PROTECTION_WRITE);
+					dlog(LOG_DEBUG, "Before MEMPCY\n");
+					memcpy(swapped_frame->pte->start, buf, p_sz);
+
+					/* Restore page protection after swapping out */
+					w_unmap(swapped_frame->pte->start);
+					swapped_frame->pte->start = w_map(it->second.mapping_handles.swap_map_handle,
+						page_no * p_sz,
+						p_sz,
+						swapped_frame->pte->start,
+						swapped_frame->pte->protection);
+
+					dlog(LOG_DEBUG, "Swaped out address %lp and written to disk\n", swapped_frame->pte->start);
+
+					free(buf);
+				}
+				else {
+					w_unmap(swapped_frame->pte->start);
+					swapped_frame->pte->start = w_map(it->second.mapping_handles.swap_map_handle,
+						page_no * p_sz,
+						p_sz,
+						swapped_frame->pte->start,
+						swapped_frame->pte->protection);
+					dlog(LOG_DEBUG, "Swaped out address %lp and didn't write to disk\n", swapped_frame->pte->start);
+				}
+				swapped_frame->pte->dirty = FALSE;
+				swapped_frame->pte->prev_state = swapped_frame->pte->state;
+				swapped_frame->pte->state = STATE_IN_SWAP;
+
+				mapped_addr = w_map(it->second.mapping_handles.ram_map_handle,
+					0, p_sz, page_addr,
+					page->protection);
+				page->prev_state = page->state;
+				page->state = STATE_IN_RAM;
+				page->start = mapped_addr;
+				dlog(LOG_DEBUG, "Replaced old ram with address %lp\n", page->start);
+			}
 
 			dlog(LOG_DEBUG, "mapped_addr is %p and protection is %d\n", page->start, page->protection);
 
