@@ -46,7 +46,6 @@ enum {
  *    -DDEBUG for GCC
  *    /DDEBUG for MSVC
  */
-#define DEBUG
 
 #if defined DEBUG
 #define dprintf(format, ...)					\
