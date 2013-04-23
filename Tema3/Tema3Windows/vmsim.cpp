@@ -239,24 +239,36 @@ LONG vmsim_exception_handler(PEXCEPTION_POINTERS eptr) {
 
 			/* Allocate in RAM */
 			if (it->second.pages_in_ram < num_frames || page->state == STATE_IN_RAM) {
-				DWORD index = page->frame == NULL ? it->second.pages_in_ram : page->frame->index;
-				dlog(LOG_DEBUG, "Alocating in ram for index %d\n", index);
-				mapped_addr = w_map(it->second.mapping_handles.ram_map_handle,
-					index * p_sz, p_sz, page_addr,
-					page->protection);
-
-				page->prev_state = page->state;
-				page->state = STATE_IN_RAM;
-				page->start = mapped_addr;
-
-				if (page->frame == NULL) {
-					page->frame = (frame_t *) malloc(sizeof(frame_t));
-					page->frame->index = it->second.pages_in_ram++;
-					page->frame->pte = page;
-
-					it->second.ram_frames[page->frame->index] = *page->frame;
+				DWORD index;
+				if (page->frame == NULL && it->second.pages_in_ram < num_frames) {
+					index = it->second.pages_in_ram;
 				}
-				dlog(LOG_DEBUG, "Alocated in RAM address %lp\n", mapped_addr);
+				else if (page->frame != NULL) {
+					index = page->frame->index;
+				}
+				else {
+					index = -1;
+				}
+
+				if (index != -1) {
+					dlog(LOG_DEBUG, "Alocating in ram for index %d\n", index);
+					mapped_addr = w_map(it->second.mapping_handles.ram_map_handle,
+						index * p_sz, p_sz, page_addr,
+						page->protection);
+
+					page->prev_state = page->state;
+					page->state = STATE_IN_RAM;
+					page->start = mapped_addr;
+
+					if (page->frame == NULL) {
+						page->frame = (frame_t *) malloc(sizeof(frame_t));
+						page->frame->index = it->second.pages_in_ram++;
+						page->frame->pte = page;
+
+						it->second.ram_frames[page->frame->index] = *page->frame;
+					}
+					dlog(LOG_DEBUG, "Alocated in RAM address %lp\n", mapped_addr);
+				}
 			}
 
 			/* Swap out if RAM is full */
@@ -319,6 +331,14 @@ LONG vmsim_exception_handler(PEXCEPTION_POINTERS eptr) {
 				page->prev_state = page->state;
 				page->state = STATE_IN_RAM;
 				page->start = mapped_addr;
+
+				if (page->frame == NULL) {
+					page->frame = (frame_t *) malloc(sizeof(frame_t));
+					page->frame->index = 0;
+					page->frame->pte = page;
+
+					it->second.ram_frames[page->frame->index] = *page->frame;
+				}
 				dlog(LOG_DEBUG, "Replaced old ram with address %lp\n", page->start);
 			}
 
