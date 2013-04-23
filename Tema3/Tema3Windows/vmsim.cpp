@@ -198,9 +198,9 @@ LONG vmsim_exception_handler(PEXCEPTION_POINTERS eptr) {
 
 	/* Walk through all mappings to find  */
 	for (it = alloc_states.begin(); it != alloc_states.end(); ++it) {
-		if (addr >= (PBYTE)(it->first) &&
-			addr < (PBYTE)((PBYTE)(it->second.virtual_pages.size() * p_sz) -
-			(PBYTE)(it->second.map->start))) {
+		if ((DWORD)addr >= (DWORD)(it->first) &&
+			(DWORD)addr < ((DWORD)it->second.virtual_pages.size() * p_sz) +
+			(DWORD)(it->first)) {
 			found = true;
 
 			page_no = (int)(addr - (PBYTE)it->second.map->start) / p_sz;
