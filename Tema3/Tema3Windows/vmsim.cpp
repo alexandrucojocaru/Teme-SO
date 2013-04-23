@@ -221,12 +221,12 @@ LONG vmsim_exception_handler(PEXCEPTION_POINTERS eptr) {
 			}
 
 			/* Increase protection if page is in RAM already or not allocated */
-			if (page->state == STATE_IN_RAM || page->state == STATE_NOT_ALLOC) {
+			//if (page->state == STATE_IN_RAM || page->state == STATE_NOT_ALLOC) {
 				page->protection = (w_prot_t)(((int)page->protection + 1) % 3);
-			}
+			//}
 
 			/* Page was already allocated and must be unmapped to remap it */
-			if (page->state != STATE_NOT_ALLOC) {
+			if (page->state /*!= STATE_NOT_ALLOC*/ == STATE_IN_RAM) {
 				BOOL rc = w_unmap(page->start);
 				if (page->protection == PROTECTION_WRITE)
 					page->dirty = TRUE;
@@ -302,28 +302,51 @@ LONG vmsim_exception_handler(PEXCEPTION_POINTERS eptr) {
 
 					/* Restore page protection after swapping out */
 					w_unmap(swapped_frame->pte->start);
-					swapped_frame->pte->start = w_map(it->second.mapping_handles.swap_map_handle,
+					/*swapped_frame->pte->start = w_map(it->second.mapping_handles.swap_map_handle,
 						page_no * p_sz,
 						p_sz,
 						swapped_frame->pte->start,
-						swapped_frame->pte->protection);
+						swapped_frame->pte->protection);*/
 
 					dlog(LOG_DEBUG, "Swaped out address %lp and written to disk\n", swapped_frame->pte->start);
 
 					free(buf);
 				}
-				else {
+				else if (swapped_frame->pte->state == STATE_IN_RAM) {
 					w_unmap(swapped_frame->pte->start);
-					swapped_frame->pte->start = w_map(it->second.mapping_handles.swap_map_handle,
+					/*swapped_frame->pte->start = w_map(it->second.mapping_handles.swap_map_handle,
 						page_no * p_sz,
 						p_sz,
 						swapped_frame->pte->start,
-						swapped_frame->pte->protection);
+						swapped_frame->pte->protection);*/
 					dlog(LOG_DEBUG, "Swaped out address %lp and didn't write to disk\n", swapped_frame->pte->start);
 				}
 				swapped_frame->pte->dirty = FALSE;
 				swapped_frame->pte->prev_state = swapped_frame->pte->state;
 				swapped_frame->pte->state = STATE_IN_SWAP;
+				swapped_frame->pte->protection = PROTECTION_NONE;
+
+				/* Swap in */
+				if (page->state == STATE_IN_SWAP) {
+					char *buf = (char *)malloc(p_sz * sizeof(char));
+					dlog(LOG_DEBUG, "Swapping in address %lp\n", page->start);
+
+					mapped_addr = w_map(it->second.mapping_handles.swap_map_handle,
+						page_no * p_sz, p_sz, page_addr,
+						PROTECTION_READ);
+
+					memcpy(buf, mapped_addr, p_sz);
+
+					w_unmap(mapped_addr);
+
+					mapped_addr = w_map(it->second.mapping_handles.ram_map_handle,
+						0, p_sz, page_addr,
+						PROTECTION_WRITE);
+					memcpy(mapped_addr, buf, p_sz);
+					w_unmap(mapped_addr);
+
+					free(buf);
+				}
 
 				mapped_addr = w_map(it->second.mapping_handles.ram_map_handle,
 					0, p_sz, page_addr,
@@ -336,9 +359,9 @@ LONG vmsim_exception_handler(PEXCEPTION_POINTERS eptr) {
 					page->frame = (frame_t *) malloc(sizeof(frame_t));
 					page->frame->index = 0;
 					page->frame->pte = page;
-
-					it->second.ram_frames[page->frame->index] = *page->frame;
 				}
+				it->second.ram_frames[page->frame->index] = *page->frame;
+				
 				dlog(LOG_DEBUG, "Replaced old ram with address %lp\n", page->start);
 			}
 
