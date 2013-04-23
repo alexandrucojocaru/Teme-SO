@@ -38,7 +38,7 @@ enum {
  */
 
 #ifndef LOG_LEVEL
-#define LOG_LEVEL	LOG_WARNING
+#define LOG_LEVEL	LOG_DEBUG//LOG_WARNING
 #endif
 
 /*
@@ -46,6 +46,7 @@ enum {
  *    -DDEBUG for GCC
  *    /DDEBUG for MSVC
  */
+#define DEBUG
 
 #if defined DEBUG
 #define dprintf(format, ...)					\

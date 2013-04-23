@@ -68,6 +68,11 @@ w_boolean_t w_unmap(w_ptr_t address);
 void fill_file(w_handle_t handle, w_size_t size, char byte);
 
 /*
+ * Allocate virtual address range from a base address
+ */
+w_ptr_t w_virtual_alloc(w_ptr_t address, w_size_t size);
+
+/*
  * Fills a file with zeros
  */
 #define zero_file(handle, size)		fill_file(handle, size, 0)

@@ -34,34 +34,21 @@ w_boolean_t w_close_file_mapping(w_handle_t file_mapping) {
  * Map a base address to a file
  */
 w_ptr_t w_map(HANDLE file_map, DWORD offset_in_file, DWORD size_to_map, w_ptr_t address, w_prot_t prot) {
-	//HANDLE file_map;
 	w_ptr_t p;
-	DWORD file_access;//, handle_access;
+	DWORD file_access;
 
 	switch (prot) {
 	case PROTECTION_READ:
 		file_access = FILE_MAP_READ;
-		//handle_access = PAGE_READONLY;
 		break;
 	case PROTECTION_WRITE:
 		file_access = FILE_MAP_WRITE;
-		//handle_access = PAGE_READWRITE;
 		break;
 	default:
 		break;
 	}
 
-	dlog(LOG_DEBUG, "w_map: prot is %d and file_access is %lu\n", prot, file_access);//, handle_access);
-
-	/*file_map = CreateFileMapping(
-			fd,
-			NULL,
-			handle_access,
-			0,
-			size,
-			NULL);
-	DIE(file_map == NULL, "CreateFileMapping");
-	*/
+	dlog(LOG_DEBUG, "w_map: prot is %d and file_access is %lu\n", prot, file_access);
 
 	/* use MapViewOfFileEx to map file to that exact location */
 	p = MapViewOfFileEx(
@@ -73,17 +60,32 @@ w_ptr_t w_map(HANDLE file_map, DWORD offset_in_file, DWORD size_to_map, w_ptr_t 
 		address);
 	DIE(p == NULL, "MapViewOfFileEx");
 
-	//DIE(CloseHandle(file_map) == FALSE, "CloseHandle");
-
 	dlog(LOG_DEBUG, "MapViewOfFileEx returned %p\n", p);
 
 	return p;
 }
 
+/*
+ * Unmap view of file
+ */
 w_boolean_t w_unmap(w_ptr_t address) {
 	BOOL rc = UnmapViewOfFile(address);
 	DIE(rc == FALSE, "UnmapViewOfFile");
 	return rc;
+}
+
+/*
+ * Allocate virtual address range from a base address
+ */
+w_ptr_t w_virtual_alloc(w_ptr_t address, w_size_t size) {
+	w_ptr_t start;
+	start = VirtualAlloc(
+			address,
+			size,
+			MEM_RESERVE,
+			PAGE_NOACCESS);
+	DIE(start == NULL, "VirtualAlloc");
+	return start;
 }
 
 void fill_file(w_handle_t handle, w_size_t size, char byte)

@@ -16,7 +16,10 @@
 
 using namespace std;
 
+/* Holds the table of mappings */
 static map<w_ptr_t, mem_tables_t> alloc_states;
+
+/* Holds the pointer to the exception handler */
 static w_handle_t access_violation_handler = INVALID_HANDLE;
 
 /* initialize and cleanup library -- consider exception handler */
@@ -96,13 +99,7 @@ w_boolean_t vm_alloc(w_size_t num_pages, w_size_t num_frames, vm_map_t *map) {
 		size = num_pages * p_sz;
 
 		/* initial allocation (NUM_PAGES size) */
-		base_address = VirtualAlloc(
-				NULL,
-				size,
-				MEM_RESERVE,
-				PAGE_NOACCESS);
-		DIE(base_address == NULL, "VirtualAlloc");
-
+		base_address = w_virtual_alloc(NULL, size);
 		dlog(LOG_DEBUG, "VirtualAlloc (reserve) returned %p\n", base_address);
 
 		/* free allocation - leave room for page granular allocations */
@@ -111,12 +108,10 @@ w_boolean_t vm_alloc(w_size_t num_pages, w_size_t num_frames, vm_map_t *map) {
 
 		/* do page granular allocations at given addresses */
 		for (i = 0; i < num_pages; i++) {
-			page_entry.start = VirtualAlloc(
-					(char *) base_address + i * p_sz,
-					p_sz,
-					MEM_RESERVE,
-					PAGE_NOACCESS);
-			DIE(page_entry.start == NULL, "Virtual Alloc");
+			page_entry.start = w_virtual_alloc(
+				(char *) base_address + i * p_sz,
+				p_sz);
+			DIE(page_entry.start == NULL, "VirtualAlloc");
 			dlog(LOG_DEBUG, "granular VirtualAlloc (reserve) returned %p\n", page_entry.start);
 
 			memcpy(&mem_tables.virtual_pages[i], &page_entry, sizeof(page_table_entry_t));
@@ -171,6 +166,9 @@ w_boolean_t vm_free(w_ptr_t start) {
 			0,
 			MEM_RELEASE);
 		DIE(rc == FALSE, "VirtualFree");
+
+		free(table.virtual_pages[i].frame);
+		table.virtual_pages[i].frame = NULL;
 	}
 
 	w_close_file_mapping(table.mapping_handles.ram_map_handle);
@@ -220,10 +218,8 @@ LONG vmsim_exception_handler(PEXCEPTION_POINTERS eptr) {
 				DIE(rc == FALSE, "VirtualFree");
 			}
 
-			/* Increase protection if page is in RAM already or not allocated */
-			//if (page->state == STATE_IN_RAM || page->state == STATE_NOT_ALLOC) {
-				page->protection = (w_prot_t)(((int)page->protection + 1) % 3);
-			//}
+			/* Increase protection of the page */
+			page->protection = (w_prot_t)(((int)page->protection + 1) % 3);
 
 			/* Page was already allocated and must be unmapped to remap it */
 			if (page->state /*!= STATE_NOT_ALLOC*/ == STATE_IN_RAM) {

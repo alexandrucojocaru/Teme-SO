@@ -183,13 +183,19 @@ w_boolean_t w_protect_mapping(w_ptr_t addr, w_size_t num_pages, w_prot_t protect
 		break;
 	}
 
+	dlog(LOG_DEBUG, "addr %p to protect %d pages with %d level\n", addr, num_pages, protection);
+
 	/* commit page */
-	if (VirtualAlloc(addr, num_pages * p_sz, MEM_COMMIT, prot) == NULL)
+	if (VirtualAlloc(addr, num_pages * p_sz, MEM_COMMIT, prot) == NULL) {
+		DIE(true, "VirtualAlloc");
 		return FALSE;
+	}
 
 	dlog(LOG_DEBUG, "VirtualProtect address: %p\n", addr);
-	if (VirtualProtect(addr, num_pages * p_sz, prot, &oldProt) == FALSE)
+	if (VirtualProtect(addr, num_pages * p_sz, prot, &oldProt) == FALSE) {
+		DIE(true, "VirtualProtect");
 		return FALSE;
+	}
 
 	dlog(LOG_DEBUG, "VirtualProtect called\n");
 
