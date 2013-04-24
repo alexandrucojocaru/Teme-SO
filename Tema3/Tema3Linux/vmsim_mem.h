@@ -39,18 +39,11 @@ typedef struct frame_ {
 	page_table_entry_t *pte;
 }frame_t;
 
-/* Handles for the file mappings */
-typedef struct mapping_handles_ {
-	w_handle_t ram_map_handle;
-	w_handle_t swap_map_handle;
-} mapping_handles_t;
-
 /* Handles a mapping */
 typedef struct mem_tables_ {
 	vector<page_table_entry_t> virtual_pages;
 	vector<frame_t> ram_frames;
 	vm_map_t* map;
-	mapping_handles_t mapping_handles;
 	int pages_in_ram;
 }mem_tables_t;
 
@@ -59,22 +52,10 @@ typedef struct mem_tables_ {
 
 #define MAX_PATH 256
 
-/*
- * File mapping/unmapping
- */
-w_handle_t w_create_file_mapping(w_handle_t fd, int pages_to_map);
-w_boolean_t w_close_file_mapping(w_handle_t file_mapping);
-w_ptr_t w_map(w_handle_t file_map, unsigned long offset_in_file,
-		unsigned long size_to_map, w_ptr_t address, w_prot_t prot);
-w_boolean_t w_unmap(w_ptr_t address);
-
 
 void fill_file(w_handle_t handle, w_size_t size, char byte);
 
-/*
- * Allocate virtual address range from a base address
- */
-w_ptr_t w_virtual_alloc(w_ptr_t address, w_size_t size);
+int get_prot(w_prot_t prot);
 
 /*
  * Fills a file with zeros

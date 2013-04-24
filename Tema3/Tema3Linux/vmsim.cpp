@@ -70,26 +70,27 @@ static w_ptr_t allocate_granullar(
 		page_table_entry_t &page_entry,
 		mem_tables_t &mem_tables) {
 	w_ptr_t base_address;
-	//w_boolean_t rc;
+	int rc;
 	w_size_t size;
 	w_size_t i;
 
 	size = num_pages * p_sz;
 
 	/* initial allocation (NUM_PAGES size) */
-	base_address = w_virtual_alloc(NULL, size);
+	base_address = (w_ptr_t)mmap(NULL, size, PROT_NONE,
+			MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	DIE(base_address == MAP_FAILED, "mmap");
 	dlog(LOG_DEBUG, "VirtualAlloc (reserve) returned %p\n", base_address);
 
 	/* free allocation - leave room for page granular allocations */
-	//rc = VirtualFree(base_address, 0, MEM_RELEASE);
-	//DIE(rc == FALSE, "VirtualFree");
+	rc = munmap(base_address, size);
+	DIE(rc < 0, "munmap");
 
 	/* do page granular allocations at given addresses */
 	for (i = 0; i < num_pages; i++) {
-		page_entry.start = w_virtual_alloc(
-			(char *) base_address + i * p_sz,
-			p_sz);
-		DIE(page_entry.start == NULL, "VirtualAlloc");
+		page_entry.start = (w_ptr_t)mmap((char *)base_address + i * p_sz,
+				p_sz, PROT_NONE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+		DIE(page_entry.start == MAP_FAILED, "mmap");
 		dlog(LOG_DEBUG, "granular VirtualAlloc (reserve) returned %p\n",
 			page_entry.start);
 
@@ -130,12 +131,6 @@ w_boolean_t vm_alloc(w_size_t num_pages, w_size_t num_frames, vm_map_t *map) {
 	map->ram_handle = ram_handle;
 	map->swap_handle = swap_handle;
 
-	/* Create file mappings for ram and swap */
-	mem_tables.mapping_handles.ram_map_handle = w_create_file_mapping(
-		map->ram_handle, num_frames);
-	mem_tables.mapping_handles.swap_map_handle = w_create_file_mapping(
-		map->swap_handle, num_pages);
-
 	mem_tables.map = map;
 	mem_tables.pages_in_ram = 0;
 
@@ -172,17 +167,12 @@ w_boolean_t vm_free(w_ptr_t start) {
 	table = alloc_states[start];
 
 	for (i = 0; i < table.virtual_pages.size(); ++i) {
-		/*rc = VirtualFree(table.virtual_pages[i].start,
-			0,
-			MEM_RELEASE);
-		DIE(rc == FALSE, "VirtualFree");*/
+		int rc = munmap(table.virtual_pages[i].start, p_sz);
+		DIE(rc < 0, "munmap");
 
 		free(table.virtual_pages[i].frame);
 		table.virtual_pages[i].frame = NULL;
 	}
-
-	w_close_file_mapping(table.mapping_handles.ram_map_handle);
-	w_close_file_mapping(table.mapping_handles.swap_map_handle);
 
 	w_close_file(table.map->ram_handle);
 	w_close_file(table.map->swap_handle);
@@ -195,25 +185,27 @@ w_boolean_t vm_free(w_ptr_t start) {
 /*
  * Make the swap in copying
  */
-static void swap_in(page_table_entry_t *page, w_handle_t swap_map_handle,
-					w_handle_t ram_map_handle, int page_no,
+static void swap_in(page_table_entry_t *page, w_handle_t swap_handle,
+					w_handle_t ram_handle, int page_no,
 					w_ptr_t page_addr) {
 	char *buf = (char *)malloc(p_sz * sizeof(char));
 	dlog(LOG_DEBUG, "Swapping in address %p\n", page->start);
 
-	w_ptr_t mapped_addr = w_map(swap_map_handle,
-		page_no * p_sz, p_sz, page_addr,
-		PROTECTION_READ);
+	w_ptr_t mapped_addr = mmap(page_addr, p_sz, PROT_READ, MAP_SHARED,
+			swap_handle, page_no * p_sz);
+	DIE(mapped_addr == MAP_FAILED, "mmap");
 
 	memcpy(buf, mapped_addr, p_sz);
 
-	w_unmap(mapped_addr);
+	int rc = munmap(mapped_addr, p_sz);
+	DIE(rc < 0, "munmap");
 
-	mapped_addr = w_map(ram_map_handle,
-		0, p_sz, page_addr,
-		PROTECTION_WRITE);
+	mapped_addr = mmap(page_addr, p_sz, PROT_WRITE, MAP_SHARED, ram_handle, 0);
+	DIE(mapped_addr == MAP_FAILED, "mmap");
+
 	memcpy(mapped_addr, buf, p_sz);
-	w_unmap(mapped_addr);
+	rc = munmap(mapped_addr, p_sz);
+	DIE(rc < 0, "munmap");
 
 	free(buf);
 }
@@ -221,7 +213,7 @@ static void swap_in(page_table_entry_t *page, w_handle_t swap_map_handle,
 /*
  * Make the swap out copying
  */
-static void swap_out(frame_t *swapped_frame, w_handle_t swap_map_handle,
+static void swap_out(frame_t *swapped_frame, w_handle_t swap_handle,
 					 int page_no) {
 	dlog(LOG_DEBUG, "Swapping out address which seems to be dirty or never swapped %p\n",
 		swapped_frame->pte->start);
@@ -229,20 +221,21 @@ static void swap_out(frame_t *swapped_frame, w_handle_t swap_map_handle,
 	char *buf = (char *)malloc(p_sz * sizeof(char));
 
 	memcpy(buf, swapped_frame->pte->start, p_sz);
-	w_unmap(swapped_frame->pte->start);
+
+	int rc = munmap(swapped_frame->pte->start, p_sz);
+	DIE(rc < 0, "munmap");
 
 	/* Map with prot write to make the swapping out */
-	swapped_frame->pte->start = w_map(
-		swap_map_handle,
-		page_no * p_sz,
-		p_sz,
-		swapped_frame->pte->start,
-		PROTECTION_WRITE);
+	swapped_frame->pte->start = mmap(swapped_frame->pte->start,
+			p_sz, PROT_WRITE, MAP_SHARED, swap_handle, page_no * p_sz);
+	DIE(swapped_frame->pte->start == MAP_FAILED, "mmap");
+
 	dlog(LOG_DEBUG, "Before MEMPCY\n");
 	memcpy(swapped_frame->pte->start, buf, p_sz);
 
 	/* Unmap the swapped page after swapping out */
-	w_unmap(swapped_frame->pte->start);
+	rc = munmap(swapped_frame->pte->start, p_sz);
+	DIE(rc < 0, "munmap");
 
 	dlog(LOG_DEBUG, "Swaped out address %p and written to disk\n", swapped_frame->pte->start);
 
@@ -273,24 +266,19 @@ static void handle_address_fault(w_ptr_t addr, map<w_ptr_t, mem_tables_t>::itera
 
 	page_table_entry_t *page = &(it->second.virtual_pages[page_no]);
 
-	/* Page was not previously alocated */
-	if (page->state == STATE_NOT_ALLOC) {
-		/* free allocation - leave room for MapViewOfFileEx */
-		/*BOOL rc = VirtualFree(page_addr, 0, MEM_RELEASE);
-		DIE(rc == FALSE, "VirtualFree");*/
-	}
-
 	/* Increase protection of the page */
 	page->protection = (w_prot_t)(((int)page->protection + 1) % 3);
 
 	/* Page was already allocated and must be unmapped to remap it */
-	if (page->state == STATE_IN_RAM) {
-		w_unmap(page->start);
+	if (page->state == STATE_IN_RAM || page->state == STATE_NOT_ALLOC) {
+		int rc = munmap(page->start, p_sz);
+		DIE(rc < 0, "munmap");
+
 		if (page->protection == PROTECTION_WRITE)
 			page->dirty = TRUE;
 	}
 
-	int num_pages = (int)it->second.virtual_pages.size();
+	//int num_pages = (int)it->second.virtual_pages.size();
 	int num_frames = (int)it->second.ram_frames.size();
 
 	w_ptr_t mapped_addr;
@@ -310,9 +298,9 @@ static void handle_address_fault(w_ptr_t addr, map<w_ptr_t, mem_tables_t>::itera
 
 		if ((int)index != -1) {
 			dlog(LOG_DEBUG, "Alocating in ram for index %lu\n", index);
-			mapped_addr = w_map(it->second.mapping_handles.ram_map_handle,
-				index * p_sz, p_sz, page_addr,
-				page->protection);
+			mapped_addr = mmap(page_addr, p_sz, get_prot(page->protection),
+					MAP_SHARED, it->second.map->ram_handle, index * p_sz);
+			DIE(mapped_addr == MAP_FAILED, "mmap");
 
 			page->prev_state = page->state;
 			page->state = STATE_IN_RAM;
@@ -340,12 +328,12 @@ static void handle_address_fault(w_ptr_t addr, map<w_ptr_t, mem_tables_t>::itera
 				swapped_frame->pte->prev_state == STATE_IN_RAM)) ||
 				swapped_frame->pte->dirty) {
 
-			swap_out(swapped_frame, it->second.mapping_handles.swap_map_handle,
-				page_no);
+			swap_out(swapped_frame, it->second.map->swap_handle, page_no);
 		}
 		/* Skip the copying to swap. Just unmap the page */
 		else if (swapped_frame->pte->state == STATE_IN_RAM) {
-			w_unmap(swapped_frame->pte->start);
+			int rc = munmap(swapped_frame->pte->start, p_sz);
+			DIE(rc < 0, "munmap");
 			dlog(LOG_DEBUG, "Swaped out address %p and didn't write to disk\n",
 				swapped_frame->pte->start);
 		}
@@ -357,15 +345,16 @@ static void handle_address_fault(w_ptr_t addr, map<w_ptr_t, mem_tables_t>::itera
 		/* Swap in */
 		if (page->state == STATE_IN_SWAP) {
 			swap_in(page,
-				it->second.mapping_handles.swap_map_handle,
-				it->second.mapping_handles.ram_map_handle,
+				it->second.map->swap_handle,
+				it->second.map->ram_handle,
 				page_no,
 				page_addr);
 		}
 
-		mapped_addr = w_map(it->second.mapping_handles.ram_map_handle,
-			0, p_sz, page_addr,
-			page->protection);
+		mapped_addr = mmap(page_addr, p_sz, get_prot(page->protection),
+				MAP_SHARED, it->second.map->ram_handle, 0);
+		DIE(mapped_addr == MAP_FAILED, "mmap");
+
 		page->prev_state = page->state;
 		page->state = STATE_IN_RAM;
 		page->start = mapped_addr;
@@ -411,9 +400,12 @@ void vmsim_exception_handler(int sig, siginfo_t *siginfo, void *aux) {
 		w_ptr_t end = (w_ptr_t)(((unsigned long)it->second.virtual_pages.size() * p_sz) +
 			(unsigned long)(it->first));
 
+		dlog(LOG_DEBUG, "Testing if address %p is betweem %p and %p\n", addr, start, end);
+
 		w_boolean_t in_range = is_address_in_range(addr, start, end);
 
-		if (in_range) {
+		if (in_range == TRUE) {
+			dlog(LOG_DEBUG, "Address %p is between %p and %p\n", addr, start, end);
 
 			handle_address_fault(addr, it);
 
