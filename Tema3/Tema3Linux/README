@@ -1,0 +1,33 @@
+*** Tema3 SO - Virtual Memory ***
+*** Șerban-Radoi Constantin 333CA ***
+*** Aprilie 2013 ***
+
+** Descriere **
+	Tema constă în implementarea unui swapper & demand pager.
+
+** Mod compilare **
+	nmake /f Makefile
+
+** Pentru a folosi biblioteca **
+	Trebuie să existe fișierul libvmsim.dll libvmsim.lib în directorul curent,
+apoi se rulează pur și simplu aplicația ce folosește biblioteca.
+
+** Listă fișiere **
+	* vmsim.h		- Fișier ce conține declarații de funcții ale bibliotecii
+	* vmsim.cpp		- Fișier ce conține impementarea bibliotecii
+	* common.h		- Fișier ce conține wrappere și macro-uri comune
+	* common_win.cpp - Fișier ce conține implementarea wrapperelor comune
+	* debug.h		- Fișier ce conține macro-uri pentru debug
+	* vmsim_mem.h	- Fișier ce conține antete ale unor wrappere de memorie
+	* vmsim_mem.cpp	- FIșier ce conține implementarea wrapperelor de memorie
+	* Makefile		- Fișier makefile
+	* README		- Acest fișier
+
+** Detalii implementare **
+	Pentru a ține informațiile despre ce s-a alocat, am folosit un map
+cu cheia drept adresa de start a mapării și valoarea drept o structură
+cu vectorii de pagini și alte informații.
+	În momentul unui page fault mă folosesc de adresa care l-a cauzat și
+caut în tabela de mapări dacă această adresă se află într-unul din range-uri.
+Dacă da, atunci fac prelucrările necesare pentru demand paging, swap out și
+respectiv swap in.
