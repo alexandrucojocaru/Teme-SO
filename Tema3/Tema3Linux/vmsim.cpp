@@ -191,17 +191,25 @@ static void swap_in(page_table_entry_t *page, w_handle_t swap_handle,
 	char *buf = (char *)malloc(p_sz * sizeof(char));
 	dlog(LOG_DEBUG, "Swapping in address %p\n", page->start);
 
+	/* Unmap already mapped annonymous swap */
+	int rc = munmap(page_addr, p_sz);
+	DIE(rc < 0, "munmap");
+
 	w_ptr_t mapped_addr = mmap(page_addr, p_sz, PROT_READ, MAP_SHARED,
 			swap_handle, page_no * p_sz);
 	DIE(mapped_addr == MAP_FAILED, "mmap");
 
+	dlog(LOG_DEBUG, "Mapped address %p for copying from swap\n", mapped_addr);
+
 	memcpy(buf, mapped_addr, p_sz);
 
-	int rc = munmap(mapped_addr, p_sz);
+	rc = munmap(mapped_addr, p_sz);
 	DIE(rc < 0, "munmap");
 
 	mapped_addr = mmap(page_addr, p_sz, PROT_WRITE, MAP_SHARED, ram_handle, 0);
 	DIE(mapped_addr == MAP_FAILED, "mmap");
+
+	dlog(LOG_DEBUG, "Mapped address %p for copying from buf to ram\n", mapped_addr);
 
 	memcpy(mapped_addr, buf, p_sz);
 	rc = munmap(mapped_addr, p_sz);
@@ -236,6 +244,10 @@ static void swap_out(frame_t *swapped_frame, w_handle_t swap_handle,
 	/* Unmap the swapped page after swapping out */
 	rc = munmap(swapped_frame->pte->start, p_sz);
 	DIE(rc < 0, "munmap");
+
+	swapped_frame->pte->start = mmap(swapped_frame->pte->start,
+			p_sz, PROT_NONE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	DIE(swapped_frame->pte->start == MAP_FAILED, "mmap");
 
 	dlog(LOG_DEBUG, "Swaped out address %p and written to disk\n", swapped_frame->pte->start);
 
@@ -334,6 +346,11 @@ static void handle_address_fault(w_ptr_t addr, map<w_ptr_t, mem_tables_t>::itera
 		else if (swapped_frame->pte->state == STATE_IN_RAM) {
 			int rc = munmap(swapped_frame->pte->start, p_sz);
 			DIE(rc < 0, "munmap");
+
+			swapped_frame->pte->start = mmap(swapped_frame->pte->start,
+					p_sz, PROT_NONE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+			DIE(swapped_frame->pte->start == MAP_FAILED, "mmap");
+
 			dlog(LOG_DEBUG, "Swaped out address %p and didn't write to disk\n",
 				swapped_frame->pte->start);
 		}
