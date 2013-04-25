@@ -160,7 +160,6 @@ w_boolean_t vm_free(w_ptr_t start) {
 		return FALSE;
 	}
 
-	//w_boolean_t rc;
 	mem_tables_t table;
 	unsigned int i;
 
@@ -209,7 +208,8 @@ static void swap_in(page_table_entry_t *page, w_handle_t swap_handle,
 	mapped_addr = mmap(page_addr, p_sz, PROT_WRITE, MAP_SHARED, ram_handle, 0);
 	DIE(mapped_addr == MAP_FAILED, "mmap");
 
-	dlog(LOG_DEBUG, "Mapped address %p for copying from buf to ram\n", mapped_addr);
+	dlog(LOG_DEBUG, "Mapped address %p for copying from buf to ram\n",
+			mapped_addr);
 
 	memcpy(mapped_addr, buf, p_sz);
 	rc = munmap(mapped_addr, p_sz);
@@ -249,7 +249,8 @@ static void swap_out(frame_t *swapped_frame, w_handle_t swap_handle,
 			p_sz, PROT_NONE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	DIE(swapped_frame->pte->start == MAP_FAILED, "mmap");
 
-	dlog(LOG_DEBUG, "Swaped out address %p and written to disk\n", swapped_frame->pte->start);
+	dlog(LOG_DEBUG, "Swaped out address %p and written to disk\n",
+			swapped_frame->pte->start);
 
 	free(buf);
 }
@@ -268,12 +269,15 @@ static frame_t *create_frame(w_size_t index, page_table_entry_t *page) {
 /*
  * Handles a specific fault given its address
  */
-static void handle_address_fault(w_ptr_t addr, map<w_ptr_t, mem_tables_t>::iterator it) {
-	int page_no = (int)((unsigned long)addr - (unsigned long)it->second.map->start) / p_sz;
+static void handle_address_fault(w_ptr_t addr, map<w_ptr_t,
+		mem_tables_t>::iterator it) {
+	int page_no = (int)((unsigned long)addr -
+			(unsigned long)it->second.map->start) / p_sz;
 	dlog(LOG_DEBUG, "Page number %d at address %p\n",
 		page_no, addr);
 
-	w_ptr_t page_addr = (w_ptr_t)((unsigned long)it->first + page_no * (unsigned long)p_sz);
+	w_ptr_t page_addr = (w_ptr_t)((unsigned long)it->first +
+			page_no * (unsigned long)p_sz);
 	dlog(LOG_DEBUG, "Computed page_addr is %p\n", page_addr);
 
 	page_table_entry_t *page = &(it->second.virtual_pages[page_no]);
@@ -290,7 +294,6 @@ static void handle_address_fault(w_ptr_t addr, map<w_ptr_t, mem_tables_t>::itera
 			page->dirty = TRUE;
 	}
 
-	//int num_pages = (int)it->second.virtual_pages.size();
 	int num_frames = (int)it->second.ram_frames.size();
 
 	w_ptr_t mapped_addr;
@@ -328,7 +331,8 @@ static void handle_address_fault(w_ptr_t addr, map<w_ptr_t, mem_tables_t>::itera
 	}
 
 	/* Swap out if RAM is full. Also manage swap in here */
-	else if (it->second.pages_in_ram == num_frames && page->state != STATE_IN_RAM) {
+	else if (it->second.pages_in_ram == num_frames &&
+			page->state != STATE_IN_RAM) {
 		/* Swap out the first page from ram */
 		frame_t *swapped_frame = &it->second.ram_frames[0];
 
@@ -391,12 +395,12 @@ static void handle_address_fault(w_ptr_t addr, map<w_ptr_t, mem_tables_t>::itera
 /*
  * Check if a given address is in range
  */
-static w_boolean_t is_address_in_range(w_ptr_t addr, w_ptr_t start, w_ptr_t end) {
+static w_boolean_t is_address_in_range(w_ptr_t addr, w_ptr_t start,
+		w_ptr_t end) {
 	return ((unsigned long)addr >= (unsigned long)start &&
 		(unsigned long)addr < (unsigned long)end) ? TRUE : FALSE;
 }
 
-//LONG vmsim_exception_handler(PEXCEPTION_POINTERS eptr) {
 void vmsim_exception_handler(int sig, siginfo_t *siginfo, void *aux) {
 	w_ptr_t addr;
 
@@ -414,15 +418,17 @@ void vmsim_exception_handler(int sig, siginfo_t *siginfo, void *aux) {
 	/* Walk through all mappings to find the one that caused the fault */
 	for (it = alloc_states.begin(); it != alloc_states.end(); ++it) {
 		w_ptr_t start = it->first;
-		w_ptr_t end = (w_ptr_t)(((unsigned long)it->second.virtual_pages.size() * p_sz) +
-			(unsigned long)(it->first));
+		w_ptr_t end = (w_ptr_t)(((unsigned long)it->second.virtual_pages.size()
+				* p_sz) + (unsigned long)(it->first));
 
-		dlog(LOG_DEBUG, "Testing if address %p is betweem %p and %p\n", addr, start, end);
+		dlog(LOG_DEBUG, "Testing if address %p is betweem %p and %p\n",
+				addr, start, end);
 
 		w_boolean_t in_range = is_address_in_range(addr, start, end);
 
 		if (in_range == TRUE) {
-			dlog(LOG_DEBUG, "Address %p is between %p and %p\n", addr, start, end);
+			dlog(LOG_DEBUG, "Address %p is between %p and %p\n",
+					addr, start, end);
 
 			handle_address_fault(addr, it);
 

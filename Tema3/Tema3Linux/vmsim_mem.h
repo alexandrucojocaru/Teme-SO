@@ -52,9 +52,14 @@ typedef struct mem_tables_ {
 
 #define MAX_PATH 256
 
-
+/*
+ * Fills a file with a given byte
+ */
 void fill_file(w_handle_t handle, w_size_t size, char byte);
 
+/*
+ * Returns the protection used by mmap given a w_prot_t type
+ */
 int get_prot(w_prot_t prot);
 
 /*

@@ -1,7 +1,7 @@
 # Makefile for Tema 3 SO
 # Author: Constantin Serban-Radoi 333CA
 CC = g++
-CFLAGS = -Wall -g -DDEBUG -DLOG_LEVEL=LOG_DEBUG
+CFLAGS = -Wall -g #-DDEBUG -DLOG_LEVEL=LOG_DEBUG
 
 LIBVMSIM = libvmsim.so
 

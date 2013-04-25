@@ -6,7 +6,7 @@
 	Tema constă în implementarea unui swapper & demand pager.
 
 ** Mod compilare **
-	nmake /f Makefile
+	make -f Makefile
 
 ** Pentru a folosi biblioteca **
 	Trebuie să existe fișierul libvmsim.dll libvmsim.lib în directorul curent,
@@ -16,7 +16,7 @@ apoi se rulează pur și simplu aplicația ce folosește biblioteca.
 	* vmsim.h		- Fișier ce conține declarații de funcții ale bibliotecii
 	* vmsim.cpp		- Fișier ce conține impementarea bibliotecii
 	* common.h		- Fișier ce conține wrappere și macro-uri comune
-	* common_win.cpp - Fișier ce conține implementarea wrapperelor comune
+	* common_lin.cpp - Fișier ce conține implementarea wrapperelor comune
 	* debug.h		- Fișier ce conține macro-uri pentru debug
 	* vmsim_mem.h	- Fișier ce conține antete ale unor wrappere de memorie
 	* vmsim_mem.cpp	- FIșier ce conține implementarea wrapperelor de memorie
