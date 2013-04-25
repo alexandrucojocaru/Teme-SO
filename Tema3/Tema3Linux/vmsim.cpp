@@ -335,10 +335,10 @@ static void handle_address_fault(w_ptr_t addr, map<w_ptr_t, mem_tables_t>::itera
 		dlog(LOG_DEBUG, "Swapping out address %p\n", swapped_frame->pte->start);
 
 		/* If dirty, or has never been copied to swap, copy to SWAP */
-		if ((!swapped_frame->pte->dirty &&
+		if ((swapped_frame->pte->dirty == FALSE &&
 				(swapped_frame->pte->prev_state == STATE_NOT_ALLOC ||
 				swapped_frame->pte->prev_state == STATE_IN_RAM)) ||
-				swapped_frame->pte->dirty) {
+				swapped_frame->pte->dirty == TRUE) {
 
 			swap_out(swapped_frame, it->second.map->swap_handle, page_no);
 		}
